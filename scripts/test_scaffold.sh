@@ -435,9 +435,19 @@ if [[ "$SMOKE_REQUESTED" == "1" && "$FAILURES" -eq 0 ]]; then
   # network outages. In SCAFFOLD_SMOKE mode this is a hard gate: a
   # scaffold that cannot install its own dependencies is not a validated
   # end-to-end scaffold.
+  # requirements-dev.txt, not requirements.txt. It opens with
+  # `-r requirements.txt` and adds the test tooling. The runtime set alone used
+  # to be enough here only because pytest, httpx and locust were declared in
+  # it; the runtime/training split (ADR-049) moved them out, and installing the
+  # runtime set left `pytest` resolving to the SYSTEM interpreter outside this
+  # venv, which then could not see numpy:
+  #     ModuleNotFoundError: No module named 'numpy'
+  # The collection check below is the whole point of the smoke chain, so it has
+  # to run against the environment a developer of the generated service
+  # actually has.
   info "Installing scaffolded service dependencies (timeout 300s)..."
   if (cd "$SERVICE_DIR" && timeout 300 pip install --quiet --upgrade pip \
-        && timeout 300 pip install --quiet -r requirements.txt) 2>"$TEMP_ROOT/pip.log"; then
+        && timeout 300 pip install --quiet -r requirements-dev.txt) 2>"$TEMP_ROOT/pip.log"; then
     pass "Dependencies installed"
   else
     echo "pip install log tail:" >&2

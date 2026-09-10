@@ -77,9 +77,12 @@ CO_INSTALLATION_GROUPS: dict[str, tuple[str, tuple[str, ...]]] = {
     "generated-service": (
         "docs/TUTORIAL.md §3 installs eda/requirements.txt into the environment "
         "created from requirements.txt, then §4 runs `make train` in it; "
-        "eda/requirements-heavy.txt opens with `-r requirements.txt`",
+        "requirements-train.txt, requirements-dev.txt and eda/requirements-heavy.txt "
+        "each open with `-r requirements.txt`",
         (
             "templates/service/requirements.txt",
+            "templates/service/requirements-train.txt",
+            "templates/service/requirements-dev.txt",
             "templates/service/eda/requirements.txt",
             "templates/service/eda/requirements-heavy.txt",
         ),

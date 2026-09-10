@@ -50,6 +50,8 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
+        # Drift detection is PSI over numpy/pandas/sklearn — the runtime set
+        # is sufficient, and this lane is intentionally not a training lane.
         run: pip install -r ${{ matrix.service }}/requirements.txt
 
       # Cloud auth — picks the right path based on DATA_BUCKET_KIND var.

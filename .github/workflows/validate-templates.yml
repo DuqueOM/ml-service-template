@@ -773,10 +773,37 @@ jobs:
       - name: Check test clock isolation
         run: python3 scripts/check_test_clock_isolation.py
 
-      - name: Check dependency pin coherence
-        # Two requirements files installed into one environment disagreed on
-        # scikit-learn and pandera, so the tutorial's own install sequence
-        # silently upgraded the service's pins out from under it (ADR-048).
+  dependency-contract:
+    name: Dependency Partition + Pin Coherence Gates
+    runs-on: ubuntu-latest
+    # Its own job rather than steps appended to another. The first attempt
+    # bolted these onto the clock-isolation job, which installs nothing —
+    # check_dependency_partition.py imports pyyaml and died on a job whose
+    # name says it is about clocks. A gate in a job that does not describe it
+    # is a gate nobody knows how to fix when it goes red.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+      - name: Install gate dependencies
+        run: pip install --quiet pyyaml
+
+      - name: Check dependency partition (ADR-049)
+        # requirements.txt is what the Dockerfile installs. An unguarded import
+        # of a training-only package on a path the image runs would put mlflow
+        # and optuna back into every inference pod — 20 of this service's 24
+        # fixable CRITICAL/HIGH advisories, all 7 CRITICAL among them. Also
+        # rejects a lane that installs the runtime set and then runs pytest.
+        run: python3 scripts/check_dependency_partition.py
+
+      - name: Check dependency pin coherence (ADR-048)
+        # templates/service/requirements.txt and eda/requirements.txt are
+        # installed into ONE environment by docs/TUTORIAL.md and disagreed on
+        # scikit-learn (~=1.5.0 vs ~=1.9) and pandera (~=0.23.0 vs ~=0.33), so
+        # the tutorial's own install sequence silently upgraded the service's
+        # pins out from under it.
         run: python3 scripts/check_dependency_pin_coherence.py
 
   agentic-adapter-drift:

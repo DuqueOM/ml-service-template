@@ -22,6 +22,7 @@ trained against scikit-learn 1.9 and served from an image built with 1.5.2.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -32,6 +33,20 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 GATE = REPO_ROOT / "scripts" / "check_dependency_pin_coherence.py"
 
 
+def _declared_members() -> list[str]:
+    """Group membership, read from the gate itself rather than retyped here.
+
+    The gate fails when a declared member is not tracked by git, which is the
+    right behaviour — a stale group is a group that stopped checking something.
+    It also means a fixture with a hardcoded file list breaks the moment a
+    member is added, and the natural repair is to weaken the gate. Reading the
+    real declaration keeps the pressure off the useful half.
+    """
+    source = GATE.read_text(encoding="utf-8")
+    body = source.split("CO_INSTALLATION_GROUPS", 1)[1].split("\n_REQ", 1)[0]
+    return re.findall(r'"((?:templates|examples)/[\w./-]*requirements[\w.-]*\.txt)"', body)
+
+
 def _sandbox(tmp_path: Path, service: str, eda: str, *, extra: dict[str, str] | None = None) -> Path:
     """A minimal git repo shaped like this one, so the gate's discovery works.
 
@@ -40,15 +55,20 @@ def _sandbox(tmp_path: Path, service: str, eda: str, *, extra: dict[str, str] | 
     real repository with real tracked files, not a bare directory.
     """
     root = tmp_path / "repo"
-    (root / "templates" / "service" / "eda").mkdir(parents=True)
-    (root / "examples" / "minimal").mkdir(parents=True)
-    (root / "scripts").mkdir()
+    (root / "scripts").mkdir(parents=True)
+
+    # Every declared member exists, so the "declared but not tracked" branch
+    # does not fire in tests that are about something else. Members the test
+    # does not care about are inert `-r requirements.txt` includes.
+    members = _declared_members()
+    assert members, "no group members parsed out of the gate — this fixture would test nothing"
+    for member in members:
+        target = root / member
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("-r requirements.txt\n", encoding="utf-8")
 
     (root / "templates" / "service" / "requirements.txt").write_text(service, encoding="utf-8")
     (root / "templates" / "service" / "eda" / "requirements.txt").write_text(eda, encoding="utf-8")
-    (root / "templates" / "service" / "eda" / "requirements-heavy.txt").write_text(
-        "-r requirements.txt\n", encoding="utf-8"
-    )
     (root / "examples" / "minimal" / "requirements.txt").write_text("pytest ~= 9.1.1\n", encoding="utf-8")
     for rel, body in (extra or {}).items():
         target = root / rel

@@ -10,7 +10,11 @@
 
 ```bash
 # Install dependencies
-pip install -r requirements.txt
+# Three lanes (ADR-049). A training env is a superset of a serving env;
+# the served image gets requirements.txt and nothing more.
+pip install -r requirements-train.txt   # runtime + mlflow/optuna — needed to train
+# pip install -r requirements.txt      # serving only, what the image installs
+# pip install -r requirements-dev.txt  # runtime + pytest/httpx/locust/linters
 
 # Train model
 python -m src.{@ service_slug @}.training.train --data data/raw/dataset.csv

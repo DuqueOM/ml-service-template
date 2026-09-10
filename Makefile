@@ -187,6 +187,7 @@ GATES := \
 	check_markdownlint_parity \
 	check_test_clock_isolation \
 	check_dependency_pin_coherence \
+	check_dependency_partition \
 	validate_agentic
 
 verify: ## Run every fast CI gate locally (the pre-push contract). Slow E2E lives in `make smoke`.

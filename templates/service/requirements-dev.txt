@@ -1,0 +1,24 @@
+# Development dependencies — tests, linters, load generation. NOT installed in
+# the served image, and not needed to train.
+#
+# Install:
+#     pip install -r requirements-dev.txt
+#
+# Mirrors the `dev` extra in pyproject.toml. The two are kept in lockstep by
+# the template repo's `check_dependency_partition.py` gate: ADR-035 declared
+# that requirements*.txt is an export of pyproject.toml (invariant I-035-1)
+# and nothing enforced it until that gate existed.
+
+-r requirements.txt
+
+pytest               ~= 8.3.0
+pytest-cov           ~= 6.0.0
+locust               ~= 2.32.0    # tests/load_test.py
+httpx                ~= 0.28.0    # FastAPI TestClient transport
+jsonschema           ~= 4.23.0    # scripts/validate_quality_gates.py + its test
+
+# ADR-044 replaced black + isort + flake8 with ruff.
+ruff                 ~= 0.15.15
+mypy                 ~= 1.13.0
+bandit               ~= 1.7.10
+pre-commit           ~= 3.7.0

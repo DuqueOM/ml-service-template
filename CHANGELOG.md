@@ -15,6 +15,92 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Changed — the served image installs only what it runs
+
+- `requirements.txt` is what the Dockerfile installs, and it carried **mlflow,
+  optuna, pytest, pytest-cov, locust and httpx** — none of which any code in the
+  image imports. Measured:
+
+  | | packages | fixable CRITICAL/HIGH | of which CRITICAL |
+  | --- | ---: | ---: | ---: |
+  | before | **151** | **24** | **7** |
+  | after | **35** | **4** | **0** |
+
+  The 20 that disappear are all MLflow. The 4 that remain (starlette ×3,
+  pyarrow) are already accepted with dates in the security baseline.
+- ADR-047 said *"`app/` does not import it, so none of these findings ever
+  touched the inference path."* The first half is true and **the conclusion does
+  not follow**: installed is not imported. A scan of the image reports what is on
+  disk, an attacker who reaches code execution finds what is on disk, and the
+  SBOM attests what is on disk. The advisories were in the pods the whole time.
+- Three files now, one direction of inclusion: `requirements.txt` (serving),
+  `requirements-train.txt` (+ mlflow, optuna), `requirements-dev.txt` (+ pytest,
+  httpx, locust, jsonschema, linters). A training environment is a superset of a
+  serving one; the reverse must never be true.
+- **`scripts/check_dependency_partition.py`** (gate 17) walks the import closure
+  of everything the image runs and fails on any unguarded import of a
+  training-or-dev-only distribution. The entrypoints are **parsed out of the
+  Dockerfile** — its smoke-import steps and its `CMD` — because a hand-kept list
+  would drift from the image the first time someone added a CronJob.
+- **This does not claim the CVEs are gone.** They are still reported against
+  `requirements-train.txt` by this repo's own dependency scan, correctly: the
+  risk left the inference pods, it did not evaporate. What changed is that a
+  training-only advisory is no longer also a production-inference advisory — and
+  the MLflow major-version decision (ADR-047) is no longer coupled to the
+  serving image's security posture, so it can be taken on its merits.
+- See [ADR-049](docs/decisions/ADR-049-runtime-training-dependency-partition.md).
+
+### Added — the golden path now scans the image it builds
+
+- The generated service's `ci.yml` has always run `trivy image` and failed on
+  CRITICAL,HIGH. The golden path built an image and **never scanned it** — the
+  lane that is meant to be the trust anchor applied a weaker bar than the
+  service it generates. The scan runs *before* signing: an image that would fail
+  the adopter's own gate must not be Cosign-signed, attested and Kyverno-admitted
+  by this workflow.
+- With the Python set down to 35 packages, the base image became the remaining
+  source of fixable findings — `CVE-2025-47273` (setuptools 70.3.0) and
+  `GHSA-6v7p-g79w-8964` (msgpack 1.1.2, vendored inside pip). The runtime stage
+  now **removes** system pip, setuptools, wheel and pkg_resources. Removing beats
+  upgrading: a serving image installs nothing at runtime, so a current setuptools
+  would be the same unused surface carrying a later CVE. Verified before removal
+  that every entrypoint imports cleanly with all three blocked from
+  `sys.meta_path`.
+
+### Fixed — the split broke two lanes, and the second one taught the gate a check
+
+- `.github/workflows/template-context-tests.yml` installed only
+  `templates/service/requirements.txt` and relied on httpx and locust arriving
+  through it. Found by reading, fixed before pushing.
+- **`scripts/test_scaffold.sh` had the same defect and CI found it — after the
+  first fix had already shipped.** Its smoke chain installed the runtime set
+  into a venv and then ran `pytest`, which resolved to the *system* interpreter
+  outside that venv and reported `ModuleNotFoundError: No module named 'numpy'`
+  — blaming a package that *was* installed, because the one that was not
+  (pytest) never got as far as being missing.
+- So `check_dependency_partition.py` gained a third check: **no lane may install
+  the runtime set and then invoke a tool only `requirements-dev.txt` provides.**
+  Scoped per *job*, not per file, because `validate-templates.yml` installs the
+  service requirements in one job and runs ruff, mypy and bandit in others — a
+  file-wide check flagged five pairs that never share a runner, and a gate that
+  cries wolf five times gets deleted rather than obeyed. `examples/minimal` is
+  excluded by path: it is its own co-installation group (ADR-048) and its
+  `pytest ~= 9.1.1` is legitimately different.
+- Both real failures are now regression-tested by reintroducing them.
+- `copier.yml`'s closing message and the `README` quick start told the adopter to
+  install and then train; training needs `requirements-train.txt`.
+
+### Fixed — the split would have broken this repository's own test lane
+
+- `.github/workflows/template-context-tests.yml` installed only
+  `templates/service/requirements.txt` and relied on httpx and locust arriving
+  through it. After the split that lane would have failed every TestClient test
+  with `No module named 'httpx'`. It installs `requirements-dev.txt` now —
+  verified in a clean venv: httpx, locust, jsonschema, pytest and `TestClient`
+  all present, mlflow and optuna both absent.
+- The `README` quick start told the adopter to install and then train; training
+  needs `requirements-train.txt`. Same for the scaffolder's closing "next steps".
+
 ### Fixed — the CLI was dead, and `dvc repro` had never worked
 
 - **`src/<slug>/evaluation.py` and `src/<slug>/evaluation/` both existed.** A

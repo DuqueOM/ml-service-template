@@ -2,7 +2,7 @@
 
 Why this exists
 ---------------
-This repository relies on sixteen gates to detect its own drift, and **none of
+This repository relies on seventeen gates to detect its own drift, and **none of
 them was tested**. `grep -rl "import scripts"` over both test trees returned
 nothing. Every control that catches a regression could itself regress, silently.
 
@@ -69,7 +69,8 @@ SCOPE: dict[str, tuple[str, int, str]] = {
     "check_markdownlint_parity": (r"OK — (\d+) rule settings", 7, "rule settings compared"),
     "check_test_clock_isolation": (r"scanned (\d+) test file", 17, "test files scanned"),
     "check_control_claims": (r"OK — \d+ of (\d+) anti-patterns", 38, "anti-patterns scanned"),
-    "check_dependency_pin_coherence": (r"OK — (\d+) requirements file", 4, "requirements files grouped"),
+    "check_dependency_pin_coherence": (r"OK — (\d+) requirements file", 6, "requirements files grouped"),
+    "check_dependency_partition": (r"OK — (\d+) runtime module", 16, "runtime modules walked"),
 }
 
 # Gates whose success line carries no scope number, with the reason. Their exit
@@ -110,7 +111,7 @@ def _run(gate: str) -> tuple[int, str]:
 def test_gate_list_was_discovered() -> None:
     """An empty parametrize set is reported as a pass; make it a failure."""
     assert GATES, f"no GATES found in {MAKEFILE} — this whole module would check nothing"
-    assert len(GATES) >= 16, f"only {len(GATES)} gates discovered; the suite has had 16 since 2026-09-09"
+    assert len(GATES) >= 17, f"only {len(GATES)} gates discovered; the suite has had 17 since 2026-09-09"
 
 
 def test_every_gate_is_accounted_for() -> None:

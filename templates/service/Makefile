@@ -46,17 +46,22 @@ help: ## Show this help message
 # Development
 # ═══════════════════════════════════════════════
 
-install: ## Install dependencies
-	@echo "$(GREEN)Installing dependencies...$(NC)"
+install: ## Install runtime dependencies (what the served image gets)
+	@echo "$(GREEN)Installing runtime dependencies...$(NC)"
 	pip install -r requirements.txt
-	@echo "$(GREEN)✓ Dependencies installed$(NC)"
+	@echo "$(GREEN)✓ Runtime dependencies installed$(NC)"
 
-install-dev: ## Install dev dependencies + pre-commit hooks
+install-train: ## Install runtime + training dependencies (mlflow, optuna)
+	@echo "$(GREEN)Installing training dependencies...$(NC)"
+	pip install -r requirements-train.txt
+	@echo "$(GREEN)✓ Training environment ready$(NC)"
+
+install-dev: ## Install runtime + dev dependencies + pre-commit hooks
 	@echo "$(GREEN)Installing dev dependencies...$(NC)"
-	pip install -r requirements.txt
-	pip install pre-commit pytest-cov locust
+	pip install -r requirements-dev.txt
 	pre-commit install
 	@echo "$(GREEN)✓ Dev environment ready$(NC)"
+	@echo "$(YELLOW)  make train also needs: make install-train (ADR-049).$(NC)"
 
 install-uv: ## Install dependencies with uv (faster, reproducible)
 	@echo "$(GREEN)Installing dependencies with uv...$(NC)"
@@ -64,10 +69,14 @@ install-uv: ## Install dependencies with uv (faster, reproducible)
 	@echo "$(GREEN)✓ Dependencies installed via uv$(NC)"
 	@echo "$(GREEN)  (requirements.txt retained for pip compatibility)$(NC)"
 
-lock: ## Freeze requirements.txt into a hash-pinned lockfile (reproducible rebuilds)
-	@echo "$(GREEN)Generating hash-pinned lockfile from requirements.txt...$(NC)"
+lock: ## Freeze each requirements file into a hash-pinned lockfile (reproducible rebuilds)
+	@echo "$(GREEN)Generating hash-pinned lockfiles...$(NC)"
 	uv pip compile requirements.txt --generate-hashes -o requirements.lock.txt
-	@echo "$(GREEN)✓ requirements.lock.txt written — commit it with the release.$(NC)"
+	uv pip compile requirements-train.txt --generate-hashes -o requirements-train.lock.txt
+	@echo "$(GREEN)✓ lockfiles written — commit them with the release.$(NC)"
+	@echo "$(YELLOW)  The runtime lock is what the image installs; the training lock"
+	@echo "  is a superset. Locking only one of the two was how the split"
+	@echo "  would quietly stop meaning anything.$(NC)"
 	@echo "$(YELLOW)  requirements.txt (~=) states intent; the lockfile guarantees"
 	@echo "  byte-identical rebuilds a year from now. Install with:"
 	@echo "  pip install --require-hashes -r requirements.lock.txt$(NC)"

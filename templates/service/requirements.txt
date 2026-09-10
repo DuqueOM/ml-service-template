@@ -1,9 +1,26 @@
+# Runtime dependencies — everything the SERVED IMAGE needs, and nothing else.
+#
+# This file is what the Dockerfile installs. Every package below is imported,
+# unguarded, by code that runs inside the image: the FastAPI app, common_utils,
+# and the src/ modules the monitoring CronJobs invoke from the same image.
+#
+# Training-only packages live in requirements-train.txt; test and lint tooling
+# lives in requirements-dev.txt. That split is not cosmetic — before it, the
+# served image carried mlflow, optuna, pytest, pytest-cov, locust and httpx,
+# none of which it imports, and with them 20 of the 24 fixable CRITICAL/HIGH
+# advisories the dependency scan reported (all 7 CRITICAL among them).
+# Measured: 150 resolved packages and 24 findings before, 35 and 4 after.
+# See ADR-049. `scripts/check_dependency_partition.py` in the template repo
+# fails if a training-only package reappears here.
+#
+# Pinning is `~=` (compatible release) by policy — D-05. `==` belongs in the
+# lockfile (`make lock`), not here.
+
 # ML Core
 scikit-learn         ~= 1.5.0
 pandas               ~= 2.2.0
 numpy                ~= 1.26.0    # numpy 2.x silently corrupts joblib models
-scipy                ~= 1.14.0
-optuna               ~= 4.1.0
+scipy                ~= 1.14.0    # champion/challenger significance tests
 joblib               ~= 1.4.0
 
 # Serving
@@ -13,25 +30,14 @@ pydantic             ~= 2.10.0
 
 # Data Validation
 pandera              ~= 0.23.0
-jsonschema           ~= 4.23.0    # PR-B1 — quality_gates.schema.json validator (test_quality_gates_schema_sync.py)
 
 # Explainability
-shap                 ~= 0.46.0
+shap                 ~= 0.46.0    # KernelExplainer, loaded lazily by the app
 
 # Monitoring
 prometheus-client    ~= 0.21.0
-evidently            ~= 0.5.0
-pyarrow              ~= 18.0.0   # parquet backend for prediction_logger (ADR-006)
-pyyaml               ~= 6.0.0    # ground_truth config loader
-
-# MLflow
-mlflow               ~= 2.18.0
-
-# Testing
-pytest               ~= 8.3.0
-pytest-cov           ~= 6.0.0
-locust               ~= 2.32.0
-httpx                ~= 0.28.0
+pyarrow              ~= 18.0.0    # parquet backend for prediction_logger (ADR-006)
+pyyaml               ~= 6.0.0     # config + ground-truth loaders
 
 # Optional — uncomment if needed:
 # xgboost            ~= 2.1.0

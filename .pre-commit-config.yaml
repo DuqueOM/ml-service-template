@@ -270,6 +270,18 @@ repos:
         language: system
         pass_filenames: false
         files: requirements.*\.txt$|^scripts/check_dependency_pin_coherence\.py$
+      - id: dependency-partition
+        name: the served image imports nothing training-only
+        description: |
+          requirements.txt is what the Dockerfile installs, and it carried
+          mlflow, optuna, pytest, locust and httpx — 20 of the service's 24
+          fixable CRITICAL/HIGH advisories, all 7 CRITICAL among them, in
+          packages no code in the image imports. One unguarded `import mlflow`
+          on a path the CronJobs reach puts it all back (ADR-049).
+        entry: python3 scripts/check_dependency_partition.py
+        language: system
+        pass_filenames: false
+        files: ^templates/service/(src/|app/|common_utils/|Dockerfile|requirements)|^scripts/check_dependency_partition\.py$
       - id: test-clock-isolation
         name: tests do not depend on the wall clock
         entry: python3 scripts/check_test_clock_isolation.py

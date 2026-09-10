@@ -75,9 +75,11 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install pytest pytest-cov
+        # requirements-dev.txt pulls requirements.txt and adds the test
+        # tooling. It deliberately does NOT pull requirements-train.txt:
+        # if a test needs mlflow or optuna it belongs in a training lane,
+        # not here (ADR-049).
+        run: pip install -r requirements-dev.txt
 
       - name: Run tests
         run: |

@@ -1,0 +1,26 @@
+# Training dependencies — the offline pipeline only. NOT installed in the
+# served image.
+#
+# Install for a training run:
+#     pip install -r requirements-train.txt
+#
+# It pulls the runtime set first, so a training environment is a superset of a
+# serving environment. The reverse must never be true: nothing under app/,
+# common_utils/, or the src/ modules the CronJobs run may import a package
+# declared here. The template repo's `check_dependency_partition.py` gate
+# enforces that direction by parsing imports, not by reading this comment.
+#
+# These packages carry the bulk of this service's known vulnerability surface
+# (ADR-047). Keeping them out of the served image does not make the advisories
+# go away — the dependency scan still reports them from this file — it means a
+# training-only advisory is no longer also a production-inference advisory.
+
+-r requirements.txt
+
+mlflow               ~= 2.18.0    # experiment tracking + model registry
+optuna               ~= 4.1.0     # hyperparameter search
+
+# Optional — uncomment if your pipeline enables SMOTE / random undersampling
+# in src/<slug>/models.py (the import there is guarded and falls back to
+# no resampling when absent):
+# imbalanced-learn   ~= 0.12.0

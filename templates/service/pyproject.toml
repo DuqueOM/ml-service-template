@@ -25,12 +25,16 @@ authors = [
 ]
 
 dependencies = [
+    # Runtime only — everything the SERVED IMAGE imports, and nothing else.
+    # Training extras live in [project.optional-dependencies.train], test and
+    # lint tooling in .dev. requirements*.txt is the pip-only export of these
+    # three groups (ADR-035 I-035-1) and the template repo's
+    # `check_dependency_partition.py` gate keeps them in lockstep.
     # ML Core
     "scikit-learn ~= 1.5.0",
     "pandas ~= 2.2.0",
     "numpy ~= 1.26.0",         # numpy 2.x silently corrupts joblib models
-    "scipy ~= 1.14.0",
-    "optuna ~= 4.1.0",
+    "scipy ~= 1.14.0",         # champion/challenger significance tests
     "joblib ~= 1.4.0",
     # Serving
     "fastapi ~= 0.115.0",
@@ -38,24 +42,31 @@ dependencies = [
     "pydantic ~= 2.10.0",
     # Data Validation
     "pandera ~= 0.23.0",
-    "jsonschema ~= 4.23.0",
     # Explainability
     "shap ~= 0.46.0",
     # Monitoring
     "prometheus-client ~= 0.21.0",
-    "evidently ~= 0.5.0",
     "pyarrow ~= 18.0.0",
     "pyyaml ~= 6.0.0",
-    # MLflow
-    "mlflow ~= 2.18.0",
 ]
 
 [project.optional-dependencies]
+# Offline training pipeline. Deliberately absent from the served image: these
+# two carried 20 of the 24 fixable CRITICAL/HIGH advisories this service's
+# dependency scan reported, and no code that runs in the image imports them
+# (ADR-047, ADR-049).
+train = [
+    "mlflow ~= 2.18.0",
+    "optuna ~= 4.1.0",
+    # "imbalanced-learn ~= 0.12.0",  # optional: SMOTE / undersampling
+]
+
 dev = [
     "pytest ~= 8.3.0",
     "pytest-cov ~= 6.0.0",
     "locust ~= 2.32.0",
     "httpx ~= 0.28.0",
+    "jsonschema ~= 4.23.0",
     # ADR-044 replaced black + isort + flake8 with ruff. All three stayed
     # declared here, so every generated service installed three linters it
     # never runs — and did not declare the one it does. Dependabot noticed

@@ -9,7 +9,11 @@
 uv sync
 
 # Option B: pip (compatible, e.g. air-gapped environments)
-pip install -r requirements.txt
+# Three lanes (ADR-049). A training env is a superset of a serving env;
+# the served image gets requirements.txt and nothing more.
+pip install -r requirements-train.txt   # runtime + mlflow/optuna — needed to train
+# pip install -r requirements.txt      # serving only, what the image installs
+# pip install -r requirements-dev.txt  # runtime + pytest/httpx/locust/linters
 
 python -m src.{@ service_slug @}.training.train --data data/raw/dataset.csv
 uvicorn app.main:app --host 0.0.0.0 --port 8000

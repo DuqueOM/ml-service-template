@@ -39,16 +39,26 @@ jobs:
           cache-dependency-path: templates/service/requirements.txt
 
       - name: Install service requirements
-        # Full requirements (incl. pyarrow + locust) so the prediction
-        # logger and load_test module import cleanly — partial installs
-        # were the source of 52 spurious lifespan errors (R6 §S1-2).
-        # Copier + jsonschema needed because policy tests scaffold a
-        # service via new-service.sh (Copier wrapper) with post-gen
-        # validation that requires jsonschema.
+        # requirements-dev.txt, NOT requirements.txt. It opens with
+        # `-r requirements.txt` and adds the test tooling — pytest, httpx
+        # (the TestClient transport), locust (the parity lane) and
+        # jsonschema. Those four used to sit in requirements.txt itself,
+        # which is how this step got away with installing one file; the
+        # runtime/training split (ADR-049) moved them out, and installing
+        # only the runtime set here would have failed every TestClient test
+        # with `No module named 'httpx'`.
+        #
+        # Full set so the prediction logger and load_test module import
+        # cleanly — partial installs were the source of 52 spurious lifespan
+        # errors (R6 §S1-2). Copier is needed because policy tests scaffold a
+        # service via new-service.sh.
+        #
+        # requirements-train.txt is deliberately NOT installed: a test that
+        # needs mlflow or optuna belongs in a training lane.
         run: |
           python -m pip install --upgrade pip
-          pip install -r templates/service/requirements.txt
-          pip install "copier>=9.0.0" jsonschema pytest-asyncio
+          pip install -r templates/service/requirements-dev.txt
+          pip install "copier>=9.0.0" pytest-asyncio
 
       - name: Root suite collects (AUDIT R8-05 guard)
         # Running pytest from the repo ROOT is a supported dev flow (root

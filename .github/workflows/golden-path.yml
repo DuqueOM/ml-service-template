@@ -198,6 +198,34 @@ jobs:
           docker build -t localhost:5001/${{ env.SERVICE_SLUG }}-predictor:test .
           docker push   localhost:5001/${{ env.SERVICE_SLUG }}-predictor:test
 
+      # The generated service's own ci.yml scans its image with Trivy and fails
+      # on CRITICAL,HIGH. The golden path built an image and never scanned it,
+      # so the one lane that actually produces a runnable artefact applied a
+      # weaker bar than the lane it is supposed to be the trust anchor for.
+      #
+      # It runs here, before signing: an image that would fail the adopter's own
+      # gate must not be signed, attested and admitted by this workflow — that
+      # would put a Cosign signature on something the template tells adopters to
+      # reject.
+      #
+      # The runtime/training split (ADR-049) is what makes this affordable to
+      # switch on: the served image carried 24 fixable CRITICAL/HIGH advisories
+      # before it and 4 after, none of them CRITICAL. The four that remain
+      # (starlette x3, pyarrow) are accepted with dates in
+      # .security-baselines/trivy-fs.trivyignore, and check_baselines_expiry.py
+      # fails the build when those dates pass.
+      - name: Trivy image scan (the gate the generated service ships)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: localhost:5001/${{ env.SERVICE_SLUG }}-predictor:test
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+          trivyignores: .security-baselines/trivy-fs.trivyignore
+          format: table
+
       - name: Capture image digest
         id: digest
         # Mirrors the canonical step in templates/service/.github/workflows/deploy-{gcp,aws}.yml.

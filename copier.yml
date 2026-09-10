@@ -144,7 +144,10 @@ _message_after_copy: |
 
   Next steps:
     1. cd into the generated project and review README.md
-    2. Create a virtualenv and `pip install -r requirements.txt`
+    2. Create a virtualenv, then pick a lane (ADR-049):
+         requirements-train.txt  runtime + mlflow/optuna — needed to train
+         requirements-dev.txt    runtime + pytest/httpx/locust/linters
+         requirements.txt        serving only — what the image installs
     3. Initialize git + push to {@ gh_org @}/{@ gh_repo @}
     4. Run the local validation chain (see Makefile: `make help`)
 

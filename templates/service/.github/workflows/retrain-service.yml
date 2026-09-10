@@ -38,7 +38,9 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install -r ${{ env.SERVICE }}/requirements.txt
+        # Training needs mlflow + optuna, which the served image does not
+        # carry (ADR-049). requirements-train.txt pulls the runtime set too.
+        run: pip install -r ${{ env.SERVICE }}/requirements-train.txt
 
       # Cloud auth (parametrized by MODEL_BUCKET_KIND var — audit High-7).
       - name: Authenticate to GCP (WIF)
