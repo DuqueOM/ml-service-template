@@ -74,7 +74,7 @@ dev = [
     "ruff ~= 0.15.15",
     "mypy ~= 1.13.0",
     "bandit ~= 1.7.10",
-    "pre-commit ~= 3.7.0",
+    "pre-commit >= 3.7,< 4.7",
 ]
 
 # Optional heavy ML dependencies — uncomment if needed
