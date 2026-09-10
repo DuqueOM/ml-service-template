@@ -35,7 +35,7 @@ dependencies = [
     "pandas ~= 2.2.0",
     "numpy ~= 1.26.0",         # numpy 2.x silently corrupts joblib models
     "scipy ~= 1.14.0",         # champion/challenger significance tests
-    "joblib ~= 1.4.0",
+    "joblib >= 1.4,< 1.7",
     # Serving
     "fastapi ~= 0.115.0",
     "uvicorn ~= 0.32.0",
