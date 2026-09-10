@@ -51,8 +51,17 @@ def train_command(args: argparse.Namespace) -> int:
     Returns 0 on success, 1 on failure.
     """
     try:
-        ServiceConfig.from_yaml(args.config)  # Validate config exists and is parseable
-        trainer = Trainer(data_path=args.input, output_dir=args.model_dir)
+        # The config is USED, not merely validated. This line read
+        # `ServiceConfig.from_yaml(args.config)` and threw the result away —
+        # its own comment said "Validate config exists and is parseable" — so
+        # the `mlflow` block an adopter filled in never reached MLflow and
+        # every run went to MLflow's own default.
+        config = ServiceConfig.from_yaml(args.config)
+        trainer = Trainer(
+            data_path=args.input,
+            output_dir=args.model_dir,
+            mlflow_config=config.mlflow,
+        )
         result = trainer.run(optuna_trials=args.optuna_trials)
 
         # Save metrics

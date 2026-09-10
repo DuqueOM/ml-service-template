@@ -282,6 +282,19 @@ repos:
         language: system
         pass_filenames: false
         files: ^templates/service/(src/|app/|common_utils/|Dockerfile|requirements)|^scripts/check_dependency_partition\.py$
+      - id: config-is-read
+        name: declared service config is read, or declared unwired
+        description: |
+          MLflowConfig declared tracking_uri, was parsed and validated from
+          config.yaml, and was read by nothing — so the staging/prod tracking
+          servers were decorative and MLflow silently used ./mlruns. 13 of 51
+          declared fields were in that state, 10 of them settable in YAML
+          (ADR-050). A field that is parsed and ignored answers the adopter's
+          question with a value that is not the answer.
+        entry: python3 scripts/check_config_is_read.py
+        language: system
+        pass_filenames: false
+        files: ^templates/service/(src/|app/|common_utils/)|^scripts/check_config_is_read\.py$
       - id: test-clock-isolation
         name: tests do not depend on the wall clock
         entry: python3 scripts/check_test_clock_isolation.py
