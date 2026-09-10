@@ -25,7 +25,7 @@ joblib               ~= 1.4.0
 
 # Serving
 fastapi              ~= 0.115.0
-uvicorn              ~= 0.32.0
+uvicorn              >= 0.32,< 0.53
 pydantic             ~= 2.10.0
 
 # Data Validation
