@@ -26,6 +26,12 @@
 # TODO: Replace with your actual column names and types
 data:
   target_column: "target"                  # Column name of the label/target
+  # ⚠ NOT YET WIRED (ADR-050). These three are parsed and validated, and the
+  # training pipeline does not read them: `src/<slug>/training/model.py` carries
+  # module-level NUMERIC_FEATURES / CATEGORICAL_FEATURES constants, and its
+  # ColumnTransformer uses those. Editing the lists below changes nothing —
+  # edit model.py. Tracked by `scripts/check_config_is_read.py`, which pins the
+  # count of unwired fields so it can shrink but not grow.
   drop_columns:                            # Columns to exclude (IDs, row numbers, etc.)
     - "RowNumber"
     - "CustomerId"
@@ -60,6 +66,9 @@ training:
 # TODO: Choose your model type and tune hyperparameters
 model:
   type: "ensemble"                         # Options: ensemble, xgboost, lightgbm, neural_network
+  # ⚠ NOT YET WIRED (ADR-050). `models.py` implements ResampleClassifier with a
+  # `strategy` argument, but `build_pipeline()` never constructs it, so this
+  # toggle has no effect. Pass the strategy in model.py until it is wired.
   resampling_strategy: "none"              # Options: none, oversample (SMOTE), undersample, class_weight
 
   # Ensemble: Logistic Regression + Random Forest via VotingClassifier
@@ -67,6 +76,9 @@ model:
     voting: "soft"                         # "soft" uses predict_proba, "hard" uses majority vote
     weights: [0.4, 0.6]                    # Weight per base estimator
 
+  # ⚠ NOT YET WIRED (ADR-050). No code selects a model type from config;
+  # `build_pipeline()` hardcodes GradientBoostingClassifier. These two blocks
+  # and their nested hyperparameters are unreachable until that changes.
   logistic_regression:
     C: 0.1
     class_weight: "balanced"

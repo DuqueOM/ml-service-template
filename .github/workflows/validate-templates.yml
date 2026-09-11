@@ -773,8 +773,8 @@ jobs:
       - name: Check test clock isolation
         run: python3 scripts/check_test_clock_isolation.py
 
-  dependency-contract:
-    name: Dependency Partition + Pin Coherence Gates
+  declaration-contract:
+    name: Dependency + Config Declaration Gates
     runs-on: ubuntu-latest
     # Its own job rather than steps appended to another. The first attempt
     # bolted these onto the clock-isolation job, which installs nothing —
@@ -797,6 +797,12 @@ jobs:
         # fixable CRITICAL/HIGH advisories, all 7 CRITICAL among them. Also
         # rejects a lane that installs the runtime set and then runs pytest.
         run: python3 scripts/check_dependency_partition.py
+
+      - name: Check declared config is read (ADR-050)
+        # MLflowConfig.tracking_uri was parsed, validated and read by nothing,
+        # so the staging/prod tracking servers were decorative. 13 of 51
+        # declared fields were in that state. This pins the count.
+        run: python3 scripts/check_config_is_read.py
 
       - name: Check dependency pin coherence (ADR-048)
         # templates/service/requirements.txt and eda/requirements.txt are

@@ -15,6 +15,7 @@ TODO: Adjust field names, types, and defaults to match your domain.
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import Any, List
 
@@ -243,11 +244,46 @@ class DataConfig(BaseModel):
 
 
 class MLflowConfig(BaseModel):
-    """MLflow tracking configuration."""
+    """MLflow tracking configuration.
+
+    These three fields were declared, loaded from ``configs/config.yaml``, and
+    **read by nothing**. ``Trainer._log_to_mlflow`` called
+    ``mlflow.set_experiment()`` and never ``mlflow.set_tracking_uri()``, so
+    MLflow fell through to its own default (``./mlruns``) whatever this said.
+
+    Two consequences, both measured:
+
+    * Setting ``tracking_uri: "sqlite:///mlflow.db"`` in ``config.yaml`` loaded
+      correctly into this model and changed nothing —
+      ``mlflow.get_tracking_uri()`` still reported the local file store.
+    * The ``staging`` and ``prod`` profiles point at
+      ``http://mlflow.mlflow-system.svc.cluster.local:5000``, which therefore
+      did nothing for training. Retraining in CI worked only because
+      ``retrain-service.yml`` exports ``MLFLOW_TRACKING_URI`` from a secret,
+      i.e. through the one channel MLflow reads on its own.
+
+    A config that is parsed, validated and ignored is worse than no config:
+    it answers the question "where do my runs go?" with a value that is not
+    the answer.
+    """
 
     tracking_uri: str = "file:./mlruns"
     experiment_name: str = "{@ service_name @}-Production"
     enabled: bool = True
+
+    def resolve_tracking_uri(self) -> str:
+        """The URI MLflow should actually use: environment first, then config.
+
+        ``MLFLOW_TRACKING_URI`` wins because it is MLflow's own variable and
+        because the deploy chain already sets it from a secret — a config file
+        committed to the repository must not be able to redirect a production
+        run's tracking to somewhere else. The config file is the answer for
+        local and for anyone who prefers declaring it in one place.
+
+        Precedence is resolved here rather than at the call site so it is
+        stated once and can be tested without running a training pipeline.
+        """
+        return os.getenv("MLFLOW_TRACKING_URI") or self.tracking_uri
 
 
 # ---------------------------------------------------------------------------
@@ -296,7 +332,11 @@ class QualityGatesConfig(BaseModel):
     latency_sla_ms: float = Field(
         100.0,
         gt=0.0,
-        description="P95 inference latency SLA. Read by the load-test target.",
+        description=(
+            "P95 inference latency SLA. NOT YET WIRED (ADR-050): the description "
+            "used to claim it was read by the load-test target, and tests/load_test.py "
+            "does not read it. Set the threshold there until this is connected."
+        ),
     )
 
     protected_attributes: List[str] = Field(
@@ -315,7 +355,9 @@ class QualityGatesConfig(BaseModel):
         le=1.0,
         description=(
             "Minimum delta over the current production baseline required "
-            "to auto-promote. 0.0 disables baseline-comparison promotion."
+            "to auto-promote. 0.0 disables baseline-comparison promotion. "
+            "NOT YET WIRED (ADR-050): promote_to_mlflow.py implements no "
+            "baseline comparison, so no value here changes promotion today."
         ),
     )
 

@@ -28,7 +28,7 @@ import pandas as pd
 from sklearn.metrics import f1_score, precision_recall_curve, roc_auc_score
 from sklearn.model_selection import StratifiedKFold, cross_val_score
 
-from ..config import QualityGatesConfig
+from ..config import MLflowConfig, QualityGatesConfig, ServiceConfig
 from ..schemas import ServiceInputSchema
 from .features import FeatureEngineer
 from .model import build_pipeline
@@ -89,10 +89,16 @@ logger = logging.getLogger(__name__)
 #     expensive training step
 # Hyperparameters that DO NOT belong in the governance contract
 # (Optuna trials, CV folds, RNG seed) stay here.
+# Retained as the fallback experiment name for callers that construct a
+# Trainer directly without an MLflowConfig. `MLflowConfig.experiment_name`
+# carries the same default, and the config is authoritative when one is
+# supplied — this script no longer mutates this global from `main()`, which it
+# did, and which worked only because `_log_to_mlflow` happened to read it late.
 EXPERIMENT_NAME = "{@ service_name @}-Production"
 MODEL_REGISTRY_NAME = "{@ service_name @}Classifier"
 
 DEFAULT_QUALITY_GATES_PATH = "configs/quality_gates.yaml"
+DEFAULT_SERVICE_CONFIG_PATH = "configs/config.yaml"
 
 # PR-B2: canonical EDA artifacts location. Override in CI by passing
 # ``eda_artifacts_dir=...`` if the EDA was run with a non-default
@@ -125,7 +131,15 @@ class Trainer:
         quality_gates_path: str = DEFAULT_QUALITY_GATES_PATH,
         target_column: str = "target",
         eda_artifacts_dir: str | None = DEFAULT_EDA_ARTIFACTS_DIR,
+        mlflow_config: MLflowConfig | None = None,
     ) -> None:
+        # MLflow settings arrive as an object rather than being read off a
+        # module global. They used to be neither: `configs/config.yaml`
+        # declared `mlflow.tracking_uri` and nothing consulted it, so every
+        # run went to MLflow's own default whatever the file said. Defaulting
+        # to MLflowConfig() keeps direct `Trainer(...)` callers working and
+        # gives them the same documented precedence.
+        self.mlflow_config = mlflow_config or MLflowConfig()
         self.data_path = data_path
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -710,8 +724,26 @@ class Trainer:
         params: dict,
         artifact_path: Path,
     ) -> None:
-        """Log experiment to MLflow."""
-        mlflow.set_experiment(EXPERIMENT_NAME)
+        """Log experiment to MLflow, at the configured tracking URI.
+
+        `set_tracking_uri` is the line this method was missing. Without it
+        `set_experiment` below bound to whatever MLflow defaulted to, and the
+        configured URI — including the in-cluster server the staging and prod
+        profiles name — was never contacted.
+        """
+        if not self.mlflow_config.enabled:
+            logger.info("MLflow logging disabled (mlflow.enabled=false) — skipping")
+            return
+
+        tracking_uri = self.mlflow_config.resolve_tracking_uri()
+        mlflow.set_tracking_uri(tracking_uri)
+
+        # Logged at INFO because "where did my run go" is the first question
+        # when a run goes missing, and the answer used to be unobtainable from
+        # the output.
+        experiment = self.mlflow_config.experiment_name
+        logger.info("MLflow tracking URI: %s (experiment: %s)", tracking_uri, experiment)
+        mlflow.set_experiment(experiment)
 
         with mlflow.start_run():
             mlflow.log_params(params)
@@ -764,13 +796,46 @@ class Trainer:
         return {"all_passed": all_passed, "gates": gates, "failed": failed}
 
 
+def _load_mlflow_config(config_path: str) -> MLflowConfig:
+    """The `mlflow` block from config.yaml, or the built-in defaults.
+
+    A missing or unreadable config file is deliberately NOT fatal here.
+    Training has its own required config — `configs/quality_gates.yaml`, which
+    is loaded strictly and fails loudly — and a service that has not written a
+    `config.yaml` yet should still be able to train against the defaults. What
+    must never happen again is the previous behaviour: reading the file,
+    validating it, and then ignoring what it said.
+    """
+    try:
+        return ServiceConfig.from_yaml(config_path).mlflow
+    except FileNotFoundError:
+        logger.info("No %s — using built-in MLflow defaults", config_path)
+        return MLflowConfig()
+    except Exception as exc:  # noqa: BLE001 — a malformed mlflow block is worth naming
+        logger.warning("Could not read the mlflow block from %s (%s) — using defaults", config_path, exc)
+        return MLflowConfig()
+
+
 if __name__ == "__main__":
     import argparse
     import sys
 
     parser = argparse.ArgumentParser(description="Train {@ service_name @} model")
     parser.add_argument("--data", help="Path to training CSV (required unless --validate-config-only)")
-    parser.add_argument("--experiment", default=EXPERIMENT_NAME, help="MLflow experiment name")
+    parser.add_argument(
+        "--experiment",
+        default=None,
+        help="MLflow experiment name (overrides mlflow.experiment_name in --config)",
+    )
+    parser.add_argument(
+        "--config",
+        default=DEFAULT_SERVICE_CONFIG_PATH,
+        help=(
+            "Path to config.yaml. Its `mlflow` block sets the tracking URI and "
+            "experiment name; MLFLOW_TRACKING_URI still wins over the file. "
+            "Missing file is not an error — the built-in defaults apply."
+        ),
+    )
     parser.add_argument("--optuna-trials", type=int, default=OPTUNA_TRIALS, help="Optuna trials")
     parser.add_argument(
         "--quality-gates",
@@ -805,11 +870,19 @@ if __name__ == "__main__":
     if not args.data:
         parser.error("--data is required unless --validate-config-only is set")
 
-    EXPERIMENT_NAME = args.experiment
+    # The MLflow block used to be unreachable from here: this script mutated a
+    # module global for the experiment name and nothing ever read the tracking
+    # URI. Both now travel as one object, so `python -m ...training.train` and
+    # `python -m ...cli train` resolve them identically.
+    mlflow_config = _load_mlflow_config(args.config)
+    if args.experiment:
+        mlflow_config = mlflow_config.model_copy(update={"experiment_name": args.experiment})
+
     trainer = Trainer(
         data_path=args.data,
         quality_gates_path=args.quality_gates,
         target_column=args.target_column,
+        mlflow_config=mlflow_config,
     )
     result = trainer.run(optuna_trials=args.optuna_trials)
 

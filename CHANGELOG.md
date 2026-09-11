@@ -15,6 +15,74 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Fixed — the MLflow config was parsed, validated and read by nothing
+
+- `MLflowConfig` declared `tracking_uri`, `experiment_name` and `enabled`. All
+  three loaded from `configs/config.yaml`, all three consumed by nothing:
+  `Trainer._log_to_mlflow` called `mlflow.set_experiment()` and **never**
+  `mlflow.set_tracking_uri()`. Measured:
+
+  ```text
+  config.yaml says:            'sqlite:///mlflow.db'
+  config.mlflow.tracking_uri = 'sqlite:///mlflow.db'   <- parsed fine
+  mlflow.get_tracking_uri()  = 'file:///…/mlruns'      <- MLflow never saw it
+  ```
+
+- `cli.py` admitted it in a comment on the line that did it —
+  `ServiceConfig.from_yaml(args.config)  # Validate config exists and is parseable`
+  — it loaded the whole config to check it parsed, then discarded the object.
+- So the `staging` and `prod` profiles naming an in-cluster tracking server did
+  **nothing** for training. Retraining in CI worked only because the workflow
+  exports `MLFLOW_TRACKING_URI`, the one channel MLflow reads on its own.
+- **This corrects ADR-047's migration plan.** Its step 2 was "the five
+  file-store defaults → `sqlite:///mlflow.db`". Four of those five are values
+  the trainer never consulted, so on its own that step would have changed
+  nothing and MLflow 3.x would still have refused the file store — through a
+  migration that looked complete.
+- `MLflowConfig.resolve_tracking_uri()` states the precedence once:
+  `MLFLOW_TRACKING_URI` wins over the file, deliberately, because the deploy
+  chain sets it from a secret and a committed file must not be able to redirect
+  a production run's tracking. `--experiment` now overrides the config value
+  instead of mutating a module global from inside `if __name__ == "__main__"`.
+- Verified end to end in a generated service: with `sqlite:///mlflow.db` in
+  `config.yaml` and no env var, the run went to `mlflow.db` — experiment
+  created, one run, model registered. Before, it went to `./mlruns`.
+
+### Added — a gate for the whole class, and the class is wider than MLflow
+
+- **24 of 51 declared config fields are read by nothing**, most of them
+  settable in `configs/*.yaml`. The worst is not MLflow: `config.yaml` marks
+  `data.categorical_features` *"TODO: Replace with your actual column names"*
+  while `model.py` marks `CATEGORICAL_FEATURES` *"TODO: List your categorical
+  feature column names"* — **two places to declare one thing, and only the
+  Python one is consulted.** Feature selection is the first thing an adopter
+  edits.
+- Also unwired: `model.resampling_strategy` (the SMOTE toggle —
+  `build_pipeline()` never constructs `ResampleClassifier`),
+  `quality_gates.promotion_threshold` (`promote_to_mlflow.py` implements no
+  baseline comparison, so the promotion-gate delta it documents is
+  unenforced), and `quality_gates.latency_sla_ms`, whose own description
+  claimed *"Read by the load-test target"* — `tests/load_test.py` does not read
+  it. Both claims are corrected in `config.py`.
+- `scripts/check_config_is_read.py` (gate 18) fails on any field that is
+  neither consumed nor recorded in its `UNWIRED` table with a reason, and the
+  count is pinned: it may shrink, never grow. The fields **stay** — the
+  pipeline *should* honour `categorical_features`, so deleting the declaration
+  would resolve the inconsistency in the wrong direction, removing the promise
+  instead of keeping it.
+- `config.yaml` carries a `⚠ NOT YET WIRED (ADR-050)` banner on each affected
+  block. A gate protects the repository; the banner protects the adopter, who
+  never runs the gate.
+- **The first version of this gate would not have caught the bug it was written
+  for**, and that was found by running it against `main` rather than trusting
+  it on a fixed tree. It grepped for the field name, and `promote_to_mlflow.py`
+  has a local variable called `tracking_uri` — so it reported the identical
+  "38 read" on the broken tree. Detection is attribute access via AST now. It
+  also counted **tests** as consumers: the new regression test's own stub has
+  `self.tracking_uri`, which alone made the production field look consumed
+  again. Excluding tests is what surfaced the two quality-gates entries above.
+- See [ADR-050](docs/decisions/ADR-050-configuration-must-be-read.md).
+
 ### Changed — the served image installs only what it runs
 
 - `requirements.txt` is what the Dockerfile installs, and it carried **mlflow,
