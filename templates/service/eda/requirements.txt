@@ -26,7 +26,7 @@
 # that diverged.
 
 pandas               ~= 2.2.0     # shared with ../requirements.txt
-numpy                ~= 1.26.0    # shared — numpy 2.x silently corrupts joblib models
+numpy                ~= 1.26.4    # shared — numpy 2.x silently corrupts joblib models
 pyyaml               ~= 6.0.0     # shared — artifact + config emitters
 pyarrow              ~= 18.0.0    # shared — parquet engine for
                                   # baseline_distributions.parquet (CONTRACT.md).
