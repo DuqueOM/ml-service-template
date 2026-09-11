@@ -25,7 +25,7 @@
 # with the service's own pandera. Two of those four unused pins were the ones
 # that diverged.
 
-pandas               ~= 2.2.0     # shared with ../requirements.txt
+pandas               ~= 3.0.5     # shared with ../requirements.txt
 numpy                ~= 1.26.0    # shared — numpy 2.x silently corrupts joblib models
 pyyaml               ~= 6.0.0     # shared — artifact + config emitters
 pyarrow              ~= 18.0.0    # shared — parquet engine for
