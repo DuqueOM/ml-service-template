@@ -89,10 +89,39 @@ updates:
       interval: "weekly"
       day: "thursday"
     open-pull-requests-limit: 5
+    # Minor and patch batch together; a MAJOR arrives on its own.
+    #
+    # Grouping every update-type produced #159: 26 packages in one diff,
+    # including numpy 1.26 -> 2.x, pandas 2.2 -> 3.x, mypy 1 -> 2 and
+    # pre-commit 3 -> 4. Unreviewable, and it disagreed with itself — numpy
+    # resolved to ~=2.5.3 in the EDA lane and ~=2.4.6 in the service lane, so
+    # the pin-coherence gate rejected the very PR the grouping was meant to
+    # make mergeable.
+    #
+    # Grouping exists to keep a SHARED pin in step across the two lanes, which
+    # minor/patch bumps need and majors do not: a major wants its own diff, its
+    # own test run and its own decision.
     groups:
       service-python:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # numpy 2.x is the one pin with a stated correctness reason rather than a
+      # convenience one: "numpy 2.x silently corrupts joblib models" (D-05).
+      # #159 proposed ~=2.5.3 while carrying that exact comment forward
+      # unchanged on the same line, which is how a documented boundary gets
+      # crossed by a robot that cannot read.
+      #
+      # Ignored, not silenced: whether the claim still holds for current
+      # scikit-learn and joblib is a real question, and answering it needs a
+      # measured round-trip of a fitted pipeline across the boundary, an ADR,
+      # and a release of its own. Until then a proposal to cross it is noise
+      # that has been closed four times.
+      - dependency-name: "numpy"
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: "deps"
     labels:
