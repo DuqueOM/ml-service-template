@@ -18,7 +18,7 @@ httpx                ~= 0.28.0    # FastAPI TestClient transport
 jsonschema           ~= 4.23.0    # scripts/validate_quality_gates.py + its test
 
 # ADR-044 replaced black + isort + flake8 with ruff.
-ruff                 ~= 0.15.15
+ruff                 ~= 0.16.6
 mypy                 ~= 1.13.0
 bandit               ~= 1.7.10
 pre-commit           ~= 3.7.0
