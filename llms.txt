@@ -1,7 +1,7 @@
 # ml-service-template (ML-MLOps Production Template)
 
 > Agent-driven template for production ML systems.
-> Version: v0.26.0 | License: Apache-2.0 | Author: DuqueOM
+> Version: v0.27.0 | License: Apache-2.0 | Author: DuqueOM
 
 ## What this is
 A complete, opinionated MLOps template for shipping classical ML models to
@@ -56,4 +56,4 @@ governed by ADR-028.
 - `~=` ML package pinning (numpy 2.x corrupts joblib models)
 
 ## Releases
-Active line: v0.26.0 (latest). Historical audit snapshots: v1.0.0 → v1.12.0 (immutable).
+Active line: v0.27.0 (latest). Historical audit snapshots: v1.0.0 → v1.12.0 (immutable).
