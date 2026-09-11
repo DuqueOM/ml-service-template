@@ -754,11 +754,37 @@ class Trainer:
             mlflow.set_tag("git_commit", os.getenv("GIT_SHA", "unknown"))
             mlflow.set_tag("environment", os.getenv("ENVIRONMENT", "development"))
 
-            # Register model
+            # Register model.
+            #
+            # `name=` not `artifact_path=`: 3.x deprecated the latter.
+            # `serialization_format="skops"` is 3.x's default and is kept
+            # deliberately — pickle and cloudpickle both work and MLflow warns
+            # that they "can execute arbitrary code during deserialization".
+            #
+            # `skops_trusted_types` is not optional for this pipeline. The
+            # default path fails outright:
+            #
+            #     MlflowException: The saved sklearn model references untrusted
+            #     types. Root error: Untrusted types found in the file:
+            #     ['sklearn.compose._column_transformer._RemainderColsList']
+            #
+            # The ColumnTransformer in model.py has a `remainder`, which
+            # produces that internal type, and skops does not trust it by
+            # default. ADR-047's first measurement missed this because it
+            # logged a Pipeline that had no ColumnTransformer.
+            #
+            # The list is DERIVED from the fitted pipeline, not hardcoded. A
+            # hardcoded list would be a template shipping a value that goes
+            # stale the moment an adopter edits their preprocessor — which the
+            # template explicitly tells them to do. Deriving it asserts trust
+            # in an artefact this process just fitted, which is a different and
+            # much weaker claim than trusting a model from elsewhere.
             mlflow.sklearn.log_model(
                 pipeline,
-                artifact_path="model",
+                name="model",
                 registered_model_name=MODEL_REGISTRY_NAME,
+                serialization_format="skops",
+                skops_trusted_types=_skops_trusted_types(pipeline),
             )
 
     def _quality_gates(self, metrics: dict) -> dict[str, bool]:
@@ -794,6 +820,50 @@ class Trainer:
             logger.warning("Quality gates FAILED: %s", failed)
 
         return {"all_passed": all_passed, "gates": gates, "failed": failed}
+
+
+def _skops_trusted_types(fitted_model: Any) -> list[str]:
+    """Types skops will refuse to load from `fitted_model` unless told to trust them.
+
+    MLflow 3.x serialises sklearn models with skops by default, which is the
+    safe choice — unlike pickle it does not execute arbitrary code on load. The
+    price is that it refuses types it does not recognise, and this template's
+    own pipeline contains one:
+    ``sklearn.compose._column_transformer._RemainderColsList``, produced by the
+    ``ColumnTransformer``'s ``remainder``.
+
+    Derived rather than hardcoded. The template tells adopters to edit
+    ``model.py``'s preprocessor, so a fixed list would be wrong for anyone who
+    followed the instructions — and wrong in the worst way, by failing at the
+    end of a training run rather than at its start.
+
+    An empty list on any failure, deliberately: if skops cannot be introspected
+    the correct outcome is MLflow's own refusal, naming the type, not a silent
+    blanket trust.
+    """
+    try:
+        import tempfile
+
+        import skops.io as sio
+    except ImportError:
+        logger.debug("skops not importable; letting MLflow decide what it trusts")
+        return []
+
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".skops", delete=False) as handle:
+            probe = Path(handle.name)
+        try:
+            sio.dump(fitted_model, probe)
+            untrusted = [str(name) for name in sio.get_untrusted_types(file=probe)]
+        finally:
+            probe.unlink(missing_ok=True)
+    except Exception as exc:  # noqa: BLE001 — never fail training on the probe
+        logger.warning("Could not enumerate skops types (%s); letting MLflow decide", exc)
+        return []
+
+    if untrusted:
+        logger.info("Trusting %d skops type(s) from this run's own pipeline: %s", len(untrusted), untrusted)
+    return untrusted
 
 
 def _load_mlflow_config(config_path: str) -> MLflowConfig:

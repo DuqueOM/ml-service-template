@@ -77,7 +77,8 @@ the field is left as `null` (never guessed).
 1. **Cloud provider**: `gcp`, `aws`, or `local`?
 2. **Container registry**: URL (e.g. `gcr.io/my-org/`, `123456.dkr.ecr.us-east-1.amazonaws.com/`). Leave `null` if using
    local profile.
-3. **MLflow tracking URI**: URL or `file://./mlruns` for local.
+3. **MLflow tracking URI**: URL, or `sqlite:///mlflow.db` for local. MLflow
+   3.x refuses `file:./mlruns` (ADR-047).
 4. **DVC remote**: `gs://my-bucket/dvc/`, `s3://my-bucket/dvc/`, or `null` for local.
 5. **GitHub org**: org name for CI/CD workflows.
 6. **Monitoring endpoint**: Prometheus push gateway URL, or `null` for local.
@@ -94,7 +95,7 @@ Write the answers to `<service_slug>_context.local.yaml`:
 
 cloud_provider: gcp  # or aws, local
 container_registry: gcr.io/my-org/
-mlflow_tracking_uri: file://./mlruns
+mlflow_tracking_uri: sqlite:///mlflow.db
 dvc_remote: null
 github_org: my-org
 monitoring_endpoint: null

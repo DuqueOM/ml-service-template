@@ -1,9 +1,10 @@
 # ADR-047 — Migrating the template from MLflow 2.18 to 3.x
 
-- **Status**: Proposed
-- **Date**: 2026-09-08
+- **Status**: Accepted (2026-09-11) — proposed 2026-09-08
+- **Date**: 2026-09-08, amended 2026-09-11
 - **Deciders**: template maintainer
-- **Related**: ADR-033 (local-first stack profile), `.security-baselines/trivy-fs.trivyignore`,
+- **Related**: ADR-033 (local-first stack profile), ADR-049 (runtime/training partition),
+  ADR-050 (config must be read), `.security-baselines/trivy-fs.trivyignore`,
   ADR-046 (the baseline-with-expiry idiom this follows)
 
 ## Context
@@ -147,3 +148,120 @@ exists, and renewing a date without a decision is the habit
 - MLflow remains a training and tracking dependency: `app/` does not import it,
   so none of these findings ever touched the inference path. That is why this
   is a scheduled migration and not an incident.
+
+---
+
+## Amendment, 2026-09-11 — taken, and two things the first measurement missed
+
+**Status: Accepted.** The migration is done. Two of the claims above were wrong,
+and both were wrong in the same way: they were measured on a proxy rather than
+on the thing that ships.
+
+### The model round-trip was NOT intact
+
+This document says:
+
+> 3.x changed the sklearn flavour's default serialization to `skops`, so
+> `log_model` succeeding proves nothing on its own. Logging then reloading a
+> fitted `Pipeline` gives **identical predictions** through all three paths…
+
+True of the `Pipeline` that was tested. **False of the pipeline the template
+ships**, which fails outright:
+
+```text
+MlflowException: The saved sklearn model references untrusted types. If you are
+sure loading these types is safe, set the 'skops_trusted_types' parameter …
+Root error: Untrusted types found in the file:
+['sklearn.compose._column_transformer._RemainderColsList']
+```
+
+`model.py`'s `ColumnTransformer` has a `remainder`, which produces that internal
+type, and skops does not trust it by default. The original probe used a
+`Pipeline` with no `ColumnTransformer`, so it never met the condition.
+
+The section below headed *"What was NOT verified"* named the full pipeline as
+the gap. That gap was where the defect was. **A measurement that skips the
+integration is not a smaller version of the real measurement; it is a different
+one, and the difference is exactly where this kind of failure lives.**
+
+Measured on the shipped pipeline, all four options, same 60-row holdout:
+
+| approach | logs | predictions identical |
+| --- | --- | --- |
+| `skops` (3.x default) | **fails** | — |
+| `skops` + `skops_trusted_types` | yes | yes |
+| `cloudpickle` | yes | yes |
+| `pickle` | yes | yes |
+
+**Chosen: `skops` with the trusted types derived from the fitted pipeline** via
+`skops.io.get_untrusted_types`, not hardcoded. Hardcoding would have a template
+ship a list that goes stale the first time an adopter edits their preprocessor —
+which the template explicitly instructs them to do — and it would go stale in
+the worst way, failing at the *end* of a training run. Deriving asserts trust in
+an artefact this process just fitted, which is a weaker claim than trusting a
+model from elsewhere.
+
+cloudpickle was rejected as the default even though it works: MLflow warns that
+it executes arbitrary code on deserialization, and choosing the unsafe
+serialiser to avoid one line of code is not a trade a template should make for
+everyone. It is documented in `MIGRATION.md` as the escape hatch for an adopter
+who wants it.
+
+### Step 2 of the plan would have changed nothing
+
+This document's step 2 was *"the five file-store defaults →
+`sqlite:///mlflow.db`"*. Four of those five were values **the trainer never
+read**: `_log_to_mlflow` called `set_experiment` and never
+`set_tracking_uri`, so MLflow used its own default whatever any config said.
+Measured before the fix:
+
+```text
+config.yaml says:            'sqlite:///mlflow.db'
+config.mlflow.tracking_uri = 'sqlite:///mlflow.db'   <- parsed fine
+mlflow.get_tracking_uri()  = 'file:///…/mlruns'      <- MLflow never saw it
+```
+
+So the plan's step 2, executed literally, would have edited five files, changed
+no behaviour, and left MLflow 3.x still refusing the file store — through a
+migration that looked complete. ADR-050 fixed the wiring first; this migration
+then had something to migrate.
+
+The same measurement also disposes of step 6 of the follow-up plan, *"verify
+client/server compatibility"*. There was nothing to verify: the template
+deploys no tracking server, and the two compose files that ship one used
+`ghcr.io/mlflow/mlflow:latest` — a server that can change major version between
+two `docker compose up` runs. Compatibility was not unverified, it was
+**unverifiable by construction**. Both are now pinned to `v3.16.0`, the version
+the client is pinned to, and Dependabot watches the directories that hold them.
+
+### What was verified this time, end to end
+
+Against the real generated service, real dataset, `sqlite:///mlflow.db`:
+
+- the **full ~700-line pipeline** — EDA gate, split policy, Optuna, CV, fit,
+  evaluation, quality gates (which **passed**), `model.joblib`,
+  `training_manifest.json`;
+- `Trusting 1 skops type(s) from this run's own pipeline:
+  ['sklearn.compose._column_transformer._RemainderColsList']`;
+- model registered, then reloaded through **all three paths** the template and
+  its operators use — `mlflow.sklearn.load_model(run uri)`,
+  `mlflow.pyfunc.load_model`, and `mlflow.sklearn.load_model("models:/…@champion")`,
+  the alias mechanism `promote_to_mlflow.py` depends on. All three reproduce the
+  joblib artefact's predictions exactly.
+
+### Consequences of taking it
+
+- The twenty MLflow entries are **removed** from
+  `.security-baselines/trivy-fs.trivyignore`, which drops from 27 accepted
+  findings to 7. Nothing MLflow-related is suppressed any more: if a finding
+  reappears, it blocks. The 2026-12-08 forcing function is discharged three
+  months early.
+- `test_gate_scope_ratchet.py`'s floor for that gate was lowered 27 → 7,
+  deliberately and in a reviewed diff. A baseline shrinking because the debt was
+  *paid* is the one case where lowering a floor is right — and the ratchet still
+  made it a decision rather than a number nobody read.
+- This is a template, so `~= 3.16.0` decides the MLflow major version for every
+  adopter. That was the reason this stayed *Proposed*. What changed is that
+  ADR-049 removed MLflow from the served image, so the decision is no longer
+  coupled to the serving image's security posture and could be taken on its
+  merits instead of under a deadline.

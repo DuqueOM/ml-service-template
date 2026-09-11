@@ -56,7 +56,8 @@ dependencies = [
 # dependency scan reported, and no code that runs in the image imports them
 # (ADR-047, ADR-049).
 train = [
-    "mlflow ~= 2.18.0",
+    "mlflow ~= 3.16.0",       # ADR-047
+    "skops ~= 0.14.0",        # MLflow 3.x sklearn serialiser; imported by train.py
     "optuna ~= 4.1.0",
     # "imbalanced-learn ~= 0.12.0",  # optional: SMOTE / undersampling
 ]

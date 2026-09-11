@@ -128,8 +128,16 @@ updates:
       - "python"
 
   # Docker (service template)
+  # `directories:` covers the service Dockerfile, the demo compose, the
+  # shipped MLflow stack under infra/, and this repository's own root compose.
+  # Only /templates/service was watched, so the three `:latest` images in
+  # infra/docker-compose.mlflow.yml and the one in the root compose were
+  # unpinned AND unwatched — nothing would have told anyone when they moved.
   - package-ecosystem: "docker"
-    directory: "/templates/service"
+    directories:
+      - "/"
+      - "/templates/service"
+      - "/templates/service/infra"
     schedule:
       interval: "monthly"
     labels:
