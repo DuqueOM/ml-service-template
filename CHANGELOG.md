@@ -23,6 +23,20 @@ Bump level: **MINOR number, MAJOR-class obligations** (`docs/RELEASING.md` §2.1
 — scaffolded files and a contract test are renamed.
 Release notes: [`releases/v0.27.0.md`](releases/v0.27.0.md). Adopter actions: [`MIGRATION.md`](MIGRATION.md).
 
+### Dependencies
+
+- Routine bumps merged in this cycle, each individually and in `~=` form now that
+  `versioning-strategy: increase` is set: pandera `~=0.33.1`, pandas `~=3.0.5`,
+  scikit-learn `~=1.9.0`, uvicorn `~=0.52.4`, fastapi `~=0.141.1`,
+  joblib `~=1.6.0` and numpy `~=1.26.4` in `examples/minimal` (its own
+  co-installation group, ADR-048); great-tables `~=0.24` in the EDA heavy lane;
+  ruff `~=0.16.6` in the service dev lane.
+- Closed rather than merged, with the reason on each: ten range-widening PRs that
+  violate the `~=` policy (D-05), two single-lane bumps of a *shared* pin that the
+  coherence gate correctly rejected, two numpy-major proposals, and one
+  25-package group PR. Nine of those had been arriving and being closed for weeks
+  before anyone asked why — see the Dependabot policy fixes above.
+
 ### Fixed — the numpy boundary was defended in one of the two files that share it
 
 - #161 added a Dependabot major-`ignore` for numpy to the service's pip entry
