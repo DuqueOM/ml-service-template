@@ -80,6 +80,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
   and in a reviewed diff. A baseline shrinking because the debt was *paid* is the
   one case where lowering a floor is correct — and the ratchet still made it a
   decision rather than a number nobody read.
+### Fixed — grouping every update-type produced one unreviewable pull request
+
+- #156 grouped the service and EDA pip lanes so a shared pin bumps in one PR.
+  Grouping **all** update-types then produced #159: **26 packages in one diff**,
+  including numpy 1.26 → 2.x, pandas 2.2 → 3.x, mypy 1 → 2 and pre-commit 3 → 4.
+- It also disagreed with itself. numpy resolved to `~=2.5.3` in the EDA lane and
+  `~=2.4.6` in the service lane, so the pin-coherence gate rejected the very PR
+  the grouping was meant to make mergeable.
+- And it crossed the one pin with a stated **correctness** reason rather than a
+  convenience one, carrying the reason forward on the same line:
+
+  ```diff
+  -numpy                ~= 1.26.0    # numpy 2.x silently corrupts joblib models
+  +numpy                ~= 2.5.3     # numpy 2.x silently corrupts joblib models
+  ```
+
+- The group now covers **minor and patch only**, so a major arrives on its own
+  with its own diff, test run and decision. Grouping exists to keep a *shared*
+  pin in step across the two lanes — which minor bumps need and majors do not.
+- numpy major updates are **ignored**, not silenced. Whether that 2024-era claim
+  still holds for current scikit-learn and joblib is a real question, and
+  answering it needs a measured round-trip of a fitted pipeline across the
+  boundary, an ADR and a release of its own. Until then a proposal to cross it
+  is noise that has been closed four times.
 
 ### Fixed — Dependabot was generating pull requests this repository cannot merge
 
