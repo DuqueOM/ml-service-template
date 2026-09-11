@@ -7,7 +7,7 @@
 # TODO: Replace {@ service_slug @}, {@ service_name @}, and author info.
 
 [build-system]
-requires = ["setuptools >= 68.0", "wheel"]
+requires = ["setuptools >= 84.0.0", "wheel"]
 build-backend = "setuptools.backends._legacy:_Backend"
 
 [project]
@@ -31,23 +31,23 @@ dependencies = [
     # three groups (ADR-035 I-035-1) and the template repo's
     # `check_dependency_partition.py` gate keeps them in lockstep.
     # ML Core
-    "scikit-learn ~= 1.5.0",
-    "pandas ~= 2.2.0",
-    "numpy ~= 1.26.0",         # numpy 2.x silently corrupts joblib models
-    "scipy ~= 1.14.0",         # champion/challenger significance tests
-    "joblib ~= 1.4.0",
+    "scikit-learn ~= 1.9.0",
+    "pandas ~= 3.0.5",
+    "numpy ~= 2.4.6",         # numpy 2.x silently corrupts joblib models
+    "scipy ~= 1.17.1",         # champion/challenger significance tests
+    "joblib ~= 1.6.0",
     # Serving
-    "fastapi ~= 0.115.0",
-    "uvicorn ~= 0.32.0",
-    "pydantic ~= 2.10.0",
+    "fastapi ~= 0.141.1",
+    "uvicorn ~= 0.52.4",
+    "pydantic ~= 2.13.5",
     # Data Validation
-    "pandera ~= 0.23.0",
+    "pandera ~= 0.33.1",
     # Explainability
-    "shap ~= 0.46.0",
+    "shap ~= 0.51.0",
     # Monitoring
-    "prometheus-client ~= 0.21.0",
-    "pyarrow ~= 18.0.0",
-    "pyyaml ~= 6.0.0",
+    "prometheus-client ~= 0.26.0",
+    "pyarrow ~= 25.0.1",
+    "pyyaml ~= 6.0.3",
 ]
 
 [project.optional-dependencies]
@@ -56,25 +56,25 @@ dependencies = [
 # dependency scan reported, and no code that runs in the image imports them
 # (ADR-047, ADR-049).
 train = [
-    "mlflow ~= 2.18.0",
-    "optuna ~= 4.1.0",
+    "mlflow ~= 3.16.0",
+    "optuna ~= 5.0.0",
     # "imbalanced-learn ~= 0.12.0",  # optional: SMOTE / undersampling
 ]
 
 dev = [
-    "pytest ~= 8.3.0",
-    "pytest-cov ~= 6.0.0",
-    "locust ~= 2.32.0",
-    "httpx ~= 0.28.0",
-    "jsonschema ~= 4.23.0",
+    "pytest ~= 9.1.1",
+    "pytest-cov ~= 7.1.0",
+    "locust ~= 2.46.5",
+    "httpx ~= 0.28.1",
+    "jsonschema ~= 4.26.0",
     # ADR-044 replaced black + isort + flake8 with ruff. All three stayed
     # declared here, so every generated service installed three linters it
     # never runs — and did not declare the one it does. Dependabot noticed
     # before we did: it opened a PR bumping flake8.
-    "ruff ~= 0.15.15",
-    "mypy ~= 1.13.0",
-    "bandit ~= 1.7.10",
-    "pre-commit ~= 3.7.0",
+    "ruff ~= 0.16.6",
+    "mypy ~= 2.3.1",
+    "bandit ~= 1.9.4",
+    "pre-commit ~= 4.6.2",
 ]
 
 # Optional heavy ML dependencies — uncomment if needed

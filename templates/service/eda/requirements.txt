@@ -25,10 +25,10 @@
 # with the service's own pandera. Two of those four unused pins were the ones
 # that diverged.
 
-pandas               ~= 2.2.0     # shared with ../requirements.txt
-numpy                ~= 1.26.0    # shared — numpy 2.x silently corrupts joblib models
-pyyaml               ~= 6.0.0     # shared — artifact + config emitters
-pyarrow              ~= 18.0.0    # shared — parquet engine for
+pandas               ~= 3.0.5     # shared with ../requirements.txt
+numpy                ~= 2.5.3    # shared — numpy 2.x silently corrupts joblib models
+pyyaml               ~= 6.0.3     # shared — artifact + config emitters
+pyarrow              ~= 25.0.1    # shared — parquet engine for
                                   # baseline_distributions.parquet (CONTRACT.md).
                                   # pandas reaches it, so no `import pyarrow`
                                   # appears in the pipeline and it was never

@@ -17,8 +17,8 @@
 
 -r requirements.txt
 
-mlflow               ~= 2.18.0    # experiment tracking + model registry
-optuna               ~= 4.1.0     # hyperparameter search
+mlflow               ~= 3.16.0    # experiment tracking + model registry
+optuna               ~= 5.0.0     # hyperparameter search
 
 # Optional — uncomment if your pipeline enables SMOTE / random undersampling
 # in src/<slug>/models.py (the import there is guarded and falls back to
