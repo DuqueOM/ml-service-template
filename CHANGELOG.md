@@ -15,6 +15,50 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Fixed — Dependabot was generating pull requests this repository cannot merge
+
+- `.github/dependabot.yml` set no `versioning-strategy`, and pip's default is
+  `widen`: it rewrites `~= 1.5.0` as `>=1.5,<1.10`. This repository **mandates**
+  compatible-release pins (D-05 — numpy 2.x silently corrupts joblib models), so
+  every such PR was unmergeable on arrival. **Ten were opened and closed
+  unmerged** (#130, #132, #133, #134, #136, then #146, #149, #151, #153, #155)
+  before anyone asked why they kept coming. `versioning-strategy: increase` now
+  bumps the pin in place — `~= 1.5.0` → `~= 1.9.0` — which is reviewable rather
+  than automatically wrong.
+- The service and its EDA lane had **separate** pip entries, so a package
+  declared in both got two independent PRs — and the pin-coherence gate
+  (ADR-048) correctly rejects each on its own. #148 raised pandas only in the
+  EDA lane and #152 only pyarrow, both failing with
+
+  ```text
+  group 'generated-service' disagrees on 'pyarrow':
+    ~=25.0.1   templates/service/eda/requirements.txt
+    ~=18.0.0   templates/service/requirements.txt
+  ```
+
+  That is the gate working as designed on a PR that could never have been
+  mergeable. One `directories:` entry with a group now lands the shared bump in
+  a single PR, in a shape that can pass.
+- **The gate landed four days before the first real divergence arrived**, and
+  caught it unprompted on someone else's PR. That is the only kind of evidence
+  worth having about a control.
+
+### Added — Dependabot coverage is enforced, not just requested
+
+- `.github/dependabot.yml` carried this warning in a comment: *"Adding a
+  requirements file without adding an entry here puts it back in the blind
+  spot."* **Nothing enforced it.** The pip ecosystem was absent entirely once,
+  while the repository carried four requirements files — three nominal controls
+  over Python dependencies inert at the same time.
+- `scripts/check_dependency_pin_coherence.py` now also fails when any tracked
+  requirements file sits outside every pip entry's directories, understanding
+  both `directory:` and `directories:`. Two new controls cover it: dropping the
+  EDA directory from the entry, and adding an unwatched requirements file — the
+  second trips the group check and the coverage check at once, which is what
+  should happen.
+- A stated risk with no control is the shape this whole line of work rejects.
+  It was stated, in the file, by whoever wrote the entry.
+
 ### Fixed — the MLflow config was parsed, validated and read by nothing
 
 - `MLflowConfig` declared `tracking_uri`, `experiment_name` and `enabled`. All

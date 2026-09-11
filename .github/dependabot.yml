@@ -49,31 +49,50 @@ updates:
   # had never examined a dependency either (it cannot read `~=` pins). Three
   # nominal controls over Python dependencies, all inert at once.
   #
-  # `directory:` is resolved LITERALLY, exactly as for terraform above, so
-  # every requirements file needs its own entry. Adding a requirements file
-  # without adding an entry here puts it back in the blind spot.
+  # `directory:` is resolved LITERALLY, exactly as for terraform above, and a
+  # requirements file in an unlisted directory is simply unwatched. That risk
+  # was written here and enforced by nothing; it now is —
+  # `scripts/check_dependency_pin_coherence.py` fails when any tracked
+  # requirements file sits outside every pip entry's directories. `directories:`
+  # (plural) covers a subtree's worth of files in one entry, which is how the
+  # service and its EDA lane share one grouped PR below.
   # ---------------------------------------------------------------------
 
-  # Python — the shipped service runtime
+  # Python — the shipped service, ALL of its requirements files in one entry.
+  #
+  # `directories:` (plural) rather than one entry per file, plus a group, so a
+  # package declared in more than one of them bumps in ONE pull request.
+  # Separate entries produced separate PRs, and the pin-coherence gate
+  # (ADR-048) rejects each of them on its own: #148 raised pandas only in the
+  # EDA lane and #152 only pyarrow, and both failed with
+  #
+  #     group 'generated-service' disagrees on 'pyarrow':
+  #       ~=25.0.1   templates/service/eda/requirements.txt
+  #       ~=18.0.0   templates/service/requirements.txt
+  #
+  # which is the gate doing its job on a PR that could never have been
+  # mergeable. Grouping is how the bump arrives in a shape that can pass.
+  #
+  # `versioning-strategy: increase` is the other half. The pip default is
+  # `widen`, which rewrites `~= 1.5.0` as `>=1.5,<1.10` — and this repository
+  # mandates compatible-release pins (D-05: numpy 2.x silently corrupts joblib
+  # models). Five such PRs were opened and closed unmerged (#130, #132, #133,
+  # #134, #136) before anyone looked at why they kept arriving. `increase`
+  # bumps the pin in place, `~= 1.5.0` -> `~= 1.9.0`, which is reviewable
+  # rather than automatically wrong.
   - package-ecosystem: "pip"
-    directory: "/templates/service"
+    directories:
+      - "/templates/service"
+      - "/templates/service/eda"
+    versioning-strategy: increase
     schedule:
       interval: "weekly"
       day: "thursday"
     open-pull-requests-limit: 5
-    commit-message:
-      prefix: "deps"
-    labels:
-      - "dependencies"
-      - "python"
-
-  # Python — EDA extras (shipped, optional at install time)
-  - package-ecosystem: "pip"
-    directory: "/templates/service/eda"
-    schedule:
-      interval: "weekly"
-      day: "thursday"
-    open-pull-requests-limit: 3
+    groups:
+      service-python:
+        patterns:
+          - "*"
     commit-message:
       prefix: "deps"
     labels:
@@ -83,6 +102,7 @@ updates:
   # Python — the working example an adopter runs first
   - package-ecosystem: "pip"
     directory: "/examples/minimal"
+    versioning-strategy: increase
     schedule:
       interval: "weekly"
       day: "thursday"
@@ -96,6 +116,7 @@ updates:
   # Python — this repository's own tooling (root pyproject.toml)
   - package-ecosystem: "pip"
     directory: "/"
+    versioning-strategy: increase
     schedule:
       interval: "weekly"
       day: "thursday"
