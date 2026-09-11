@@ -1,7 +1,7 @@
 # Minimal example dependencies
 scikit-learn         ~= 1.9.0
 pandas               ~= 3.0.5
-numpy                ~= 1.26.0
+numpy                ~= 1.26.4
 fastapi              ~= 0.141.1
 uvicorn              ~= 0.52.4
 pydantic             ~= 2.13.5
