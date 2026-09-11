@@ -11,14 +11,14 @@
 
 -r requirements.txt
 
-pytest               ~= 8.3.0
-pytest-cov           ~= 6.0.0
-locust               ~= 2.32.0    # tests/load_test.py
-httpx                ~= 0.28.0    # FastAPI TestClient transport
-jsonschema           ~= 4.23.0    # scripts/validate_quality_gates.py + its test
+pytest               ~= 9.1.1
+pytest-cov           ~= 7.1.0
+locust               ~= 2.46.5    # tests/load_test.py
+httpx                ~= 0.28.1    # FastAPI TestClient transport
+jsonschema           ~= 4.26.0    # scripts/validate_quality_gates.py + its test
 
 # ADR-044 replaced black + isort + flake8 with ruff.
-ruff                 ~= 0.15.15
-mypy                 ~= 1.13.0
-bandit               ~= 1.7.10
-pre-commit           ~= 3.7.0
+ruff                 ~= 0.16.6
+mypy                 ~= 2.3.1
+bandit               ~= 1.9.4
+pre-commit           ~= 4.6.2

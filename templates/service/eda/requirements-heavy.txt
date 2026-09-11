@@ -9,7 +9,7 @@
 # lane and used by nothing; seaborn pulls it in anyway, and it is named
 # explicitly so the dependency is a decision rather than a side effect.
 matplotlib~=3.11
-ydata-profiling~=4.6
+ydata-profiling~=4.18
 plotly~=7.0
 seaborn~=0.13
 great-tables~=0.24
