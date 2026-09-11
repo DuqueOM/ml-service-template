@@ -57,6 +57,7 @@ class _Recorder:
         self.tracking_uri: str | None = None
         self.experiment: str | None = None
         self.started = 0
+        self.log_model_kwargs: dict[str, Any] = {}
 
     # --- the surface _log_to_mlflow touches -------------------------------
     def set_tracking_uri(self, uri: str) -> None:
@@ -85,6 +86,10 @@ class _Recorder:
     def set_tag(self, *a: Any, **k: Any) -> None: ...
     def set_tags(self, *a: Any, **k: Any) -> None: ...
 
+    # --- what log_model was called with ----------------------------------
+    def record_log_model(self, *a: Any, **kwargs: Any) -> None:
+        self.log_model_kwargs = kwargs
+
 
 @pytest.fixture
 def train_module(monkeypatch: pytest.MonkeyPatch) -> Any:
@@ -96,7 +101,7 @@ def train_module(monkeypatch: pytest.MonkeyPatch) -> Any:
         if not name.startswith("_"):
             setattr(mlflow_stub, name, getattr(recorder, name))
     sklearn_stub = types.ModuleType("mlflow.sklearn")
-    sklearn_stub.log_model = lambda *a, **k: None  # type: ignore[attr-defined]
+    sklearn_stub.log_model = recorder.record_log_model  # type: ignore[attr-defined]
     mlflow_stub.sklearn = sklearn_stub  # type: ignore[attr-defined]
     optuna_stub = types.ModuleType("optuna")
 
@@ -199,3 +204,89 @@ def test_precedence_is_stated_in_one_place() -> None:
         assert cfg.resolve_tracking_uri() == "http://from-env:5000"
     finally:
         os.environ.pop("MLFLOW_TRACKING_URI", None)
+
+
+# ---------------------------------------------------------------------------
+# MLflow 3.x serialisation (ADR-047 amendment)
+# ---------------------------------------------------------------------------
+# 3.x serialises sklearn models with skops, which REFUSES types it does not
+# recognise — and the template's own ColumnTransformer produces one:
+# `sklearn.compose._column_transformer._RemainderColsList`, from its
+# `remainder`. The default path fails with "The saved sklearn model references
+# untrusted types", at the END of a training run.
+#
+# ADR-047 originally reported the round-trip intact. It was, for the Pipeline
+# it probed — one with no ColumnTransformer. This is the contract that stops
+# that measurement gap from reopening.
+
+
+def test_log_model_declares_the_skops_format_and_derives_its_trusted_types(
+    train_module: Any, tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
+    trainer = _trainer(train_module, tmp_path)
+    _log(train_module, trainer, tmp_path)
+
+    kwargs = train_module._recorder.log_model_kwargs
+    assert kwargs, "log_model was never called"
+    assert kwargs.get("serialization_format") == "skops", (
+        "the serialisation format must be stated, not inherited. pickle and cloudpickle "
+        "both work and MLflow warns they execute arbitrary code on load; skops is the "
+        f"deliberate choice. Got: {kwargs.get('serialization_format')!r}"
+    )
+    assert "skops_trusted_types" in kwargs, (
+        "skops_trusted_types is not optional for this pipeline. Without it, "
+        "mlflow.sklearn.log_model raises on sklearn.compose._column_transformer."
+        "_RemainderColsList and the training run fails after all its work."
+    )
+    assert isinstance(kwargs["skops_trusted_types"], list), "trusted types must be a list"
+    assert kwargs.get("name") == "model", "3.x deprecated artifact_path in favour of name"
+
+
+def test_the_trusted_types_are_derived_not_hardcoded() -> None:
+    """A fixed list would go stale the first time an adopter edits model.py.
+
+    The template tells them to. So the assertion is about *how* the list is
+    produced, not what it contains today: the helper must interrogate the
+    object it is given, and must not carry the type name as data.
+
+    Docstrings and comments are excluded — naming the type in prose is how the
+    reason gets recorded, and that is the opposite of hardcoding it.
+    """
+    import ast
+
+    source = (SERVICE_ROOT / "src" / _slug() / "training" / "train.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    helper = next(
+        (n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_skops_trusted_types"),
+        None,
+    )
+    assert helper is not None, "the derivation helper is gone"
+
+    body = helper.body[1:] if ast.get_docstring(helper) else helper.body
+    executable = "\n".join(ast.unparse(node) for node in body)
+
+    assert "get_untrusted_types" in executable, (
+        "the trusted types are no longer derived from the fitted model. A hardcoded list "
+        "is wrong for any adopter who edited their preprocessor, and wrong at the end of "
+        "a training run rather than at its start."
+    )
+    assert "_RemainderColsList" not in executable, (
+        "the helper carries a specific sklearn internal type as DATA. That is the "
+        "hardcoding this test exists to prevent — name it in a comment, never in code."
+    )
+
+
+def test_the_derivation_never_fails_training(train_module: Any) -> None:
+    """A probe that cannot run must return nothing, not raise.
+
+    If skops cannot be introspected the correct outcome is MLflow's own
+    refusal, which names the offending type, rather than a crash in the
+    helper — or worse, a blanket trust.
+    """
+
+    class Unserialisable:
+        def __reduce__(self):  # noqa: ANN204 - deliberately hostile
+            raise RuntimeError("cannot be serialised")
+
+    assert train_module._skops_trusted_types(Unserialisable()) == []

@@ -202,6 +202,9 @@ security:
 
 # --- MLflow ---
 mlflow:
-  tracking_uri: "file:./mlruns"            # Change to MLflow server URI in production
+  # MLflow 3.x refuses `file:./mlruns` (ADR-047). Existing runs migrate with
+  # `mlflow migrate-filestore` — see MIGRATION.md. Override per environment
+  # with MLFLOW_TRACKING_URI, which wins over this file (ADR-050).
+  tracking_uri: "sqlite:///mlflow.db"      # Change to MLflow server URI in production
   experiment_name: "{@ service_name @}-Production"
   enabled: true

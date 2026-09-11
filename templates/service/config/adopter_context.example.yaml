@@ -23,7 +23,7 @@ cloud_provider: local  # gcp | aws | local
 
 container_registry: null  # e.g. gcr.io/my-org/ — null when profile is local
 
-mlflow_tracking_uri: "file://./mlruns"  # tracking server URL for staging/prod
+mlflow_tracking_uri: "sqlite:///mlflow.db"  # local; a server URL for staging/prod (ADR-047)
 
 dvc_remote: null  # e.g. gs://my-bucket/dvc/ or s3://my-bucket/dvc/
 

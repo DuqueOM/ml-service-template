@@ -17,7 +17,14 @@
 
 -r requirements.txt
 
-mlflow               ~= 2.18.0    # experiment tracking + model registry
+mlflow               ~= 3.16.0    # experiment tracking + model registry (ADR-047)
+skops                ~= 0.14.0    # MLflow 3.x's default sklearn serialiser.
+                                  # Declared explicitly because train.py imports
+                                  # it directly to derive skops_trusted_types:
+                                  # an arriving-transitively dependency that
+                                  # code imports is a dependency, and pip has
+                                  # no reason to keep it if MLflow ever swaps
+                                  # serialisers.
 optuna               ~= 4.1.0     # hyperparameter search
 
 # Optional — uncomment if your pipeline enables SMOTE / random undersampling

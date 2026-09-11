@@ -146,9 +146,16 @@ def test_a_new_unaccounted_field_is_rejected(tmp_path: Path) -> None:
     root = _sandbox(tmp_path)
     config = root / "templates" / "service" / "src" / "{@ service_slug @}" / "config.py"
     text = config.read_text(encoding="utf-8")
+    # Anchored on the class declaration, not on a field's default value. The
+    # first version anchored on `tracking_uri: str = "file:./mlruns"` and broke
+    # the moment ADR-047 changed that default to sqlite — a test that fails
+    # because a value it does not care about moved is a test people learn to
+    # edit rather than read.
+    anchor = "class MLflowConfig(BaseModel):"
+    assert anchor in text, "MLflowConfig is gone; this control is stale"
     text = text.replace(
-        '    tracking_uri: str = "file:./mlruns"',
-        '    tracking_uri: str = "file:./mlruns"\n    invented_and_ignored: str = "nobody reads this"',
+        anchor,
+        anchor + '\n    invented_and_ignored: str = "nobody reads this"',
         1,
     )
     config.write_text(text, encoding="utf-8")

@@ -12,7 +12,12 @@
 
 services:
   mlflow:
-    image: ghcr.io/mlflow/mlflow:latest
+    # Pinned to the version the client is pinned to. `:latest` meant the
+    # server could move under the client between two runs, which makes
+    # client/server compatibility unverifiable by construction — and this
+    # repository mandates immutable tags everywhere else (D-17..D-19,
+    # Kyverno digest verification). ADR-047 pins the client at ~= 3.16.0.
+    image: ghcr.io/mlflow/mlflow:v3.16.0
     container_name: template-mlflow
     ports:
       - "5000:5000"

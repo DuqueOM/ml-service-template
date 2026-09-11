@@ -38,59 +38,23 @@
 # pip, so those upgrades arrive as their own PRs with CI attached.
 
 
-# --- mlflow — pinned `~= 2.18.0`, every fix is in 3.x ------------
+# --- mlflow — CLOSED 2026-09-10, migrated to `~= 3.16.0` (ADR-047) ------
 #
-# 20 findings ({'CRITICAL': 7, 'HIGH': 13}), installed 2.18.0.
-# The largest cluster by far, and the one that most needs a decision rather
-# than a bump. mlflow 3.x changes the tracking API surface the template's
-# training and promotion paths depend on. Note also that mlflow is a
-# DEVELOPMENT/tracking dependency here: it is not imported by the serving
-# path (`app/`), so the exposure is the tracking server an operator runs,
-# not the inference endpoint.
+# Twenty entries lived here, {'CRITICAL': 7, 'HIGH': 13}, the largest cluster
+# by far. All twenty are gone: mlflow 3.16.0 carries no fixable CRITICAL/HIGH
+# findings at this gate's own threshold, measured rather than assumed.
 #
-# Review question: has the mlflow 3.x migration ADR been written? If the
-# answer is still no at expiry, that is the finding — not the CVE count.
+# The review question this baseline asked was "has the mlflow 3.x migration ADR
+# been written?" It had been (ADR-047), and its conclusion was wrong: it
+# verified `_log_to_mlflow` in isolation and reported the model round-trip
+# intact, while the SHIPPED pipeline fails on 3.x because skops refuses
+# `sklearn.compose._column_transformer._RemainderColsList` from the
+# ColumnTransformer's remainder. Running the whole pipeline is what found that.
+# Fixed by deriving the trusted types from the fitted pipeline; all three load
+# paths — sklearn, pyfunc, and the `@champion` alias — reproduce the joblib
+# artefact's predictions exactly.
 #
-# expiry: 2026-12-08  reason: mlflow 2.18.0 -> needs 3.4.0rc0 (major bump); HIGH
-CVE-2025-10279
-# expiry: 2026-12-08  reason: mlflow 2.18.0 -> needs 2.22.0rc0 (major bump); HIGH
-CVE-2025-11200
-# expiry: 2026-12-08  reason: mlflow 2.18.0 -> needs 3.0.0, 2.22.4 (major bump); HIGH
-CVE-2025-11201
-# expiry: 2026-12-08  reason: mlflow 2.18.0 -> needs 3.5.0 (major bump); HIGH
-CVE-2025-14279
-# expiry: 2026-12-08  reason: mlflow 2.18.0 -> needs 3.8.0rc0 (major bump); HIGH
-CVE-2025-14287
-# expiry: 2026-12-08  reason: mlflow 2.18.0 -> needs 3.9.0rc0 (major bump); HIGH
-CVE-2025-15031
-# expiry: 2026-12-08  reason: mlflow 2.18.0 -> needs 3.9.0rc0 (major bump); CRITICAL
-CVE-2025-15036
-# expiry: 2026-12-08  reason: mlflow 2.18.0 -> needs 3.8.1 (major bump); CRITICAL
-CVE-2025-15379
-# expiry: 2026-12-08  reason: mlflow 2.18.0 -> needs 3.9.0 (major bump); CRITICAL
-CVE-2026-0596
-# expiry: 2026-12-08  reason: mlflow 2.18.0 -> needs 3.8.0rc0 (major bump); HIGH
-CVE-2026-2033
-# expiry: 2026-12-08  reason: mlflow 2.18.0 -> needs 3.9.0 (major bump); HIGH
-CVE-2026-2393
-# expiry: 2026-12-08  reason: mlflow 2.18.0 -> needs 3.10.0 (major bump); HIGH
-CVE-2026-2614
-# expiry: 2026-12-08  reason: mlflow 2.18.0 -> needs 3.8.0rc0 (major bump); CRITICAL
-CVE-2026-2635
-# expiry: 2026-12-08  reason: mlflow 2.18.0 -> needs 3.11.0rc1 (major bump); CRITICAL
-CVE-2026-2651
-# expiry: 2026-12-08  reason: mlflow 2.18.0 -> needs 3.11.0 (major bump); HIGH
-CVE-2026-2652
-# expiry: 2026-12-08  reason: mlflow 2.18.0 -> needs 3.11.0 (major bump); CRITICAL
-CVE-2026-4035
-# expiry: 2026-12-08  reason: mlflow 2.18.0 -> needs 3.11.0 (major bump); HIGH
-CVE-2026-4137
-# expiry: 2026-12-08  reason: mlflow 2.18.0 -> needs 3.15.0 (major bump); CRITICAL
-CVE-2026-64849
-# expiry: 2026-12-08  reason: mlflow 2.18.0 -> needs 3.13.0rc0 (major bump); HIGH
-CVE-2026-8147
-# expiry: 2026-12-08  reason: mlflow 2.18.0 -> needs 3.15.0 (major bump); HIGH
-GHSA-gqvg-gmmx-x4hm
+# Nothing is suppressed here now. If mlflow findings reappear, they block.
 
 # --- starlette — transitive via `fastapi ~= 0.115.0` -------------
 #

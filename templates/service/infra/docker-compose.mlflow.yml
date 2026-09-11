@@ -32,7 +32,7 @@ services:
     restart: unless-stopped
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: mlflow-minio
     ports:
       - "9000:9000"
@@ -53,7 +53,7 @@ services:
     restart: unless-stopped
 
   minio-create-bucket:
-    image: minio/mc:latest
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
     container_name: mlflow-minio-setup
     depends_on:
       - minio
@@ -69,7 +69,10 @@ services:
       - mlflow-network
 
   mlflow:
-    image: ghcr.io/mlflow/mlflow:latest
+    # Same version as the client pin (ADR-047). `:latest` here meant an
+    # adopter's tracking server could change major version between two
+    # `docker compose up` runs with no diff to show for it.
+    image: ghcr.io/mlflow/mlflow:v3.16.0
     container_name: mlflow-server
     ports:
       - "5000:5000"

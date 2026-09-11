@@ -11,7 +11,10 @@ requires:
   cloud_credentials: false
 
 mlflow:
-  tracking_uri: "file://./mlruns"
+  # sqlite, not `file://./mlruns` — MLflow 3.x refuses the file store
+  # (ADR-047). This was also the one place spelled with a double slash,
+  # while every other site used `file:./mlruns`.
+  tracking_uri: "sqlite:///mlflow.db"
   experiment_name: "{@ service_slug @}_local"
 
 serving:

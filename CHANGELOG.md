@@ -15,6 +15,72 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Changed — MLflow pinned to `~= 3.16.0`, and ADR-047's own conclusion corrected
+
+- The migration is taken. The **twenty** MLflow entries are removed from
+  `.security-baselines/trivy-fs.trivyignore` — 27 accepted findings down to 7,
+  every CRITICAL among the twenty — and nothing MLflow-related is suppressed any
+  more: a new finding blocks. The 2026-12-08 forcing function is discharged
+  three months early.
+- **ADR-047 said the model round-trip was intact. It was not.** It verified a
+  `Pipeline` with no `ColumnTransformer`; the pipeline the template *ships* has
+  one, and MLflow 3.x fails on it:
+
+  ```text
+  MlflowException: The saved sklearn model references untrusted types.
+  Root error: Untrusted types found in the file:
+  ['sklearn.compose._column_transformer._RemainderColsList']
+  ```
+
+  3.x serialises sklearn models with `skops`, which refuses types it does not
+  recognise, and the `ColumnTransformer`'s `remainder` produces that one. The
+  section of ADR-047 headed *"What was NOT verified"* named the full pipeline as
+  the gap — **and the gap was where the defect was.** A measurement that skips
+  the integration is not a smaller version of the real one.
+- Fixed by deriving `skops_trusted_types` from the fitted pipeline via
+  `skops.io.get_untrusted_types`, **not** hardcoding it: the template instructs
+  adopters to edit `model.py`'s preprocessor, so a fixed list would go stale
+  through documented use — and would fail at the *end* of a training run.
+  `cloudpickle` and `pickle` also round-trip identically and were rejected as
+  the default: MLflow warns they execute arbitrary code on load, and choosing
+  the unsafe serialiser to save one line is not a trade to make for every
+  adopter. `MIGRATION.md` documents it as the escape hatch.
+- **Verified end to end** against a real generated service — full ~700-line
+  pipeline, quality gates passed, `Trusting 1 skops type(s) from this run's own
+  pipeline`, model registered, then reloaded through **all three** paths
+  (`sklearn.load_model`, `pyfunc.load_model`, and
+  `models:/…@champion`, the alias `promote_to_mlflow.py` depends on) — all three
+  reproducing the joblib artefact's predictions exactly.
+- The five file-store defaults now say `sqlite:///mlflow.db`. This only means
+  anything because ADR-050 made the config reachable first: **four of the five
+  were values the trainer never read**, so this step executed on its own would
+  have edited five files, changed no behaviour, and left 3.x still refusing the
+  file store — through a migration that looked complete.
+- `configs/profiles/local.yaml` was also the one site spelled `file://./mlruns`
+  while every other said `file:./mlruns`. Both are gone.
+- `mlruns/` and `mlflow.db` were already gitignored in both the repo and the
+  payload. `MIGRATION.md` carries `mlflow migrate-filestore` for existing runs.
+
+### Fixed — client/server compatibility was unverifiable, not unverified
+
+- The follow-up plan asked to *"verify client 3.16 ↔ the server staging/prod
+  uses"*. There was nothing to verify: the template deploys no tracking server,
+  and both compose files that ship one used `ghcr.io/mlflow/mlflow:latest` — a
+  server that can change **major version** between two `docker compose up` runs.
+  Compatibility was not unverified; it was unverifiable by construction, in a
+  repository that mandates immutable tags and Kyverno digest verification
+  everywhere else.
+- Both are pinned to `v3.16.0`, the version the client is pinned to.
+  `minio/minio:latest` and `minio/mc:latest` are pinned to their current
+  `RELEASE.*` tags.
+- Dependabot's docker ecosystem watched only `/templates/service`, so those four
+  tags were unpinned **and** unwatched. It now covers `/`,
+  `/templates/service` and `/templates/service/infra`.
+- `test_gate_scope_ratchet.py`'s baseline floor was lowered 27 → 7, deliberately
+  and in a reviewed diff. A baseline shrinking because the debt was *paid* is the
+  one case where lowering a floor is correct — and the ratchet still made it a
+  decision rather than a number nobody read.
+
 ### Fixed — Dependabot was generating pull requests this repository cannot merge
 
 - `.github/dependabot.yml` set no `versioning-strategy`, and pip's default is

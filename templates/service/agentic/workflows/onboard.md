@@ -20,7 +20,8 @@ Ask the adopter:
 
 1. Cloud provider: `gcp`, `aws`, or `local`?
 2. Container registry URL (or `null` for local profile)
-3. MLflow tracking URI (or `file://./mlruns` for local)
+3. MLflow tracking URI (or `sqlite:///mlflow.db` for local — MLflow 3.x
+   refuses the file store, ADR-047)
 4. DVC remote (or `null` for local)
 5. GitHub org name
 6. Monitoring endpoint (or `null` for local)

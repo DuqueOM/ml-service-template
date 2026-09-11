@@ -267,7 +267,13 @@ class MLflowConfig(BaseModel):
     the answer.
     """
 
-    tracking_uri: str = "file:./mlruns"
+    # sqlite, not `file:./mlruns`. MLflow 3.x refuses the filesystem
+    # tracking backend outright (ADR-047):
+    #   MlflowException: The filesystem tracking backend (e.g. './mlruns')
+    #   is in maintenance mode ... migrate to a database backend
+    # Existing runs migrate losslessly with `mlflow migrate-filestore`;
+    # MIGRATION.md carries the command. `mlflow.db` is gitignored.
+    tracking_uri: str = "sqlite:///mlflow.db"
     experiment_name: str = "{@ service_name @}-Production"
     enabled: bool = True
 

@@ -61,7 +61,13 @@ SCOPE: dict[str, tuple[str, int, str]] = {
     "check_vendored_runtime_drift": (r"OK — (\d+) vendored file", 34, "vendored files compared"),
     "check_common_utils_drift": (r"OK — (\d+) files scanned", 20, "files scanned"),
     "check_dashboard_inventory": (r"OK — (\d+) dashboard", 5, "dashboards registered"),
-    "check_baselines_expiry": (r"OK — (\d+) entr", 27, "baseline entries checked"),
+    # Lowered 27 -> 7 on 2026-09-11, deliberately: the mlflow migration
+    # (ADR-047) removed twenty accepted findings because mlflow 3.16 carries
+    # none of them. A baseline shrinking because the debt was PAID is the
+    # one case where lowering a floor is the correct move — and the ratchet
+    # still made it a decision in a reviewed diff rather than a number
+    # nobody read. It goes back up only if new findings are accepted.
+    "check_baselines_expiry": (r"OK — (\d+) entr", 7, "baseline entries checked"),
     "check_adopter_scaffold_ref": (r"\] (\d+) adopter scaffold command", 4, "commands checked"),
     "check_service_adr_references": (r"\] (\d+) template ADRs referenced", 42, "ADR references"),
     "check_template_render_safety": (r"OK — (\d+) files under", 400, "payload files parsed"),
