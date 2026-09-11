@@ -8,6 +8,6 @@ pydantic             ~= 2.13.5
 prometheus-client    ~= 0.26.0
 shap                 ~= 0.46.0
 pandera              ~= 0.23.0
-joblib               ~= 1.4.0
+joblib               ~= 1.6.0
 httpx                ~= 0.28.1
 pytest               ~= 9.1.1
