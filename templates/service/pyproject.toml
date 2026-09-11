@@ -72,7 +72,7 @@ dev = [
     # declared here, so every generated service installed three linters it
     # never runs — and did not declare the one it does. Dependabot noticed
     # before we did: it opened a PR bumping flake8.
-    "ruff ~= 0.15.15",
+    "ruff ~= 0.16.6",
     "mypy ~= 1.13.0",
     "bandit ~= 1.7.10",
     "pre-commit ~= 3.7.0",
