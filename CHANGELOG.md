@@ -80,6 +80,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
   and in a reviewed diff. A baseline shrinking because the debt was *paid* is the
   one case where lowering a floor is correct — and the ratchet still made it a
   decision rather than a number nobody read.
+
 ### Fixed — grouping every update-type produced one unreviewable pull request
 
 - #156 grouped the service and EDA pip lanes so a shared pin bumps in one PR.
