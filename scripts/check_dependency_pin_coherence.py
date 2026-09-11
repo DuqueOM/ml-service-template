@@ -35,7 +35,16 @@ What this checks
    to pip, and the looser one silently readmits the version the tighter one
    was written to exclude.
 
-2. **Group membership is total.** Every tracked ``*requirements*.txt`` must
+2. **Dependabot watches every requirements file.** ``.github/dependabot.yml``
+   resolves its ``directory``/``directories`` literally, and its own comment
+   says so: *"Adding a requirements file without adding an entry here puts it
+   back in the blind spot."* Nothing enforced that. The pip ecosystem was
+   absent entirely once, while the repository carried four requirements files,
+   and the consequence was three nominal controls over Python dependencies all
+   inert at the same time. A stated risk with no control is the shape this
+   whole gate exists to reject, so it is checked here.
+
+3. **Group membership is total.** Every tracked ``*requirements*.txt`` must
    belong to a declared group. A new requirements file cannot join the tree
    without a human deciding what it is installed alongside — otherwise this
    gate would narrow exactly the way the defects it hunts do, and would keep
@@ -65,7 +74,10 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+import yaml
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
+DEPENDABOT = REPO_ROOT / ".github" / "dependabot.yml"
 
 # Files installed into a SHARED environment, and therefore required to agree.
 #
@@ -143,6 +155,24 @@ def _tracked_requirements() -> list[str]:
     return sorted(line for line in proc.stdout.split() if line)
 
 
+def _dependabot_pip_directories() -> set[str] | None:
+    """Directories the pip ecosystem watches, or None when the file is absent."""
+    if not DEPENDABOT.is_file():
+        return None
+    doc = yaml.safe_load(DEPENDABOT.read_text(encoding="utf-8")) or {}
+    watched: set[str] = set()
+    for entry in doc.get("updates") or []:
+        if not isinstance(entry, dict) or entry.get("package-ecosystem") != "pip":
+            continue
+        single = entry.get("directory")
+        if isinstance(single, str):
+            watched.add(single.strip("/"))
+        for many in entry.get("directories") or []:
+            if isinstance(many, str):
+                watched.add(many.strip("/"))
+    return watched
+
+
 def main() -> int:
     tracked = _tracked_requirements()
     declared = {p for _, members in CO_INSTALLATION_GROUPS.values() for p in members}
@@ -167,6 +197,24 @@ def main() -> int:
             + "\n  Either the file was removed and the group is stale, or it was\n"
             "  never committed."
         )
+
+    watched = _dependabot_pip_directories()
+    if watched is None:
+        failures.append(
+            f"{DEPENDABOT.relative_to(REPO_ROOT)} is missing, so no requirements file is\n"
+            "  watched for vulnerable versions. The pip ecosystem was absent once already."
+        )
+    else:
+        unwatched = sorted(p for p in tracked if str(Path(p).parent).strip("/") not in watched)
+        if unwatched:
+            failures.append(
+                "requirements file(s) no Dependabot pip entry watches:\n"
+                + "\n".join(f"    - {p}" for p in unwatched)
+                + "\n  Add the directory to a pip entry's `directories:` in\n"
+                f"  {DEPENDABOT.relative_to(REPO_ROOT)}. Its own comment warns that a new\n"
+                "  requirements file lands in the blind spot without one, and nothing\n"
+                "  enforced that until this check."
+            )
 
     compared = 0
     for group, (rationale, members) in CO_INSTALLATION_GROUPS.items():
@@ -205,7 +253,7 @@ def main() -> int:
     print(
         f"[dependency-pins] OK — {len(tracked)} requirements file(s) in "
         f"{len(CO_INSTALLATION_GROUPS)} co-installation group(s); "
-        f"{compared} shared pin(s) agree."
+        f"{compared} shared pin(s) agree, all watched by Dependabot."
     )
     return 0
 

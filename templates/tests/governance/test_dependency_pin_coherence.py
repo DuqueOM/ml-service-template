@@ -79,6 +79,17 @@ def _sandbox(tmp_path: Path, service: str, eda: str, *, extra: dict[str, str] | 
     # to be copied into the sandbox rather than run from this repository.
     (root / "scripts" / GATE.name).write_text(GATE.read_text(encoding="utf-8"), encoding="utf-8")
 
+    # A Dependabot config covering every member, so the coverage check does not
+    # fire in tests that are about pin coherence. Tests that are about coverage
+    # overwrite this.
+    (root / ".github").mkdir(parents=True, exist_ok=True)
+    watched = sorted({str(Path(m).parent).strip(".") or "/" for m in members})
+    (root / ".github" / "dependabot.yml").write_text(
+        "version: 2\nupdates:\n"
+        + "".join(f'  - package-ecosystem: "pip"\n    directory: "/{d.lstrip("/")}"\n' for d in watched),
+        encoding="utf-8",
+    )
+
     subprocess.run(["git", "init", "-q"], cwd=root, check=True)
     subprocess.run(["git", "add", "-A"], cwd=root, check=True)
     return root
@@ -159,6 +170,56 @@ def test_a_new_requirements_file_cannot_join_unchecked(tmp_path: Path) -> None:
     assert code == 1, f"an ungrouped requirements file was silently ignored:\n{out}"
     assert "requirements-extra.txt" in out
     assert "no co-installation group" in out
+
+
+def test_an_unwatched_requirements_file_is_rejected(tmp_path: Path) -> None:
+    """Dependabot's own comment warned about this and nothing enforced it.
+
+    `.github/dependabot.yml` resolves its directories literally, so a
+    requirements file in an unlisted directory is unwatched for vulnerable
+    versions. The pip ecosystem was absent entirely once, while the repository
+    carried four requirements files — three nominal controls over Python
+    dependencies inert at the same time.
+    """
+    root = _sandbox(tmp_path, COHERENT_SERVICE, COHERENT_EDA)
+    (root / ".github").mkdir(parents=True, exist_ok=True)
+    (root / ".github" / "dependabot.yml").write_text(
+        'version: 2\nupdates:\n  - package-ecosystem: "pip"\n    directory: "/examples/minimal"\n',
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+
+    code, out = _run(root)
+    assert code == 1, f"requirements files outside every pip entry were accepted:\n{out}"
+    assert "no Dependabot pip entry watches" in out
+    assert "templates/service/requirements.txt" in out
+
+
+def test_dependabot_directories_plural_is_understood(tmp_path: Path) -> None:
+    """`directories:` is how one entry covers the service and its EDA lane.
+
+    Separate entries produced separate PRs for a shared package, and the
+    coherence check above rejects each on its own — #148 (pandas) and #152
+    (pyarrow) both failed that way. Reading only `directory:` would report the
+    grouped config as a blind spot and push the fix back to the broken shape.
+    """
+    root = _sandbox(tmp_path, COHERENT_SERVICE, COHERENT_EDA)
+    (root / ".github").mkdir(parents=True, exist_ok=True)
+    (root / ".github" / "dependabot.yml").write_text(
+        "version: 2\nupdates:\n"
+        '  - package-ecosystem: "pip"\n'
+        "    directories:\n"
+        '      - "/templates/service"\n'
+        '      - "/templates/service/eda"\n'
+        '  - package-ecosystem: "pip"\n'
+        '    directory: "/examples/minimal"\n',
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+
+    code, out = _run(root)
+    assert code == 0, f"a `directories:` (plural) entry was not recognised:\n{out}"
+    assert "watched by Dependabot" in out
 
 
 def test_separate_groups_may_legitimately_differ(tmp_path: Path) -> None:
