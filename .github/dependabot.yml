@@ -132,6 +132,19 @@ updates:
   - package-ecosystem: "pip"
     directory: "/examples/minimal"
     versioning-strategy: increase
+    ignore:
+      # Same boundary as the service entry, for the same reason. #161 added the
+      # numpy major ignore there and missed this file — and the example trains
+      # AND serves a joblib model, so "numpy 2.x silently corrupts joblib
+      # models" (D-05) applies here exactly as it does to the service.
+      #
+      # #163 then arrived and was red twice over: the D-05 boundary, and numpy
+      # 2.5.x requires Python >= 3.12 while this template declares 3.11+ with
+      # 3.11 in the example's CI matrix. A fix scoped to one of two files that
+      # share a reason is a control narrower than its surface — the shape this
+      # repository's gates exist to reject, reproduced by hand.
+      - dependency-name: "numpy"
+        update-types: ["version-update:semver-major"]
     schedule:
       interval: "weekly"
       day: "thursday"

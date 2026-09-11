@@ -108,6 +108,22 @@ CO_INSTALLATION_GROUPS: dict[str, tuple[str, tuple[str, ...]]] = {
     ),
 }
 
+# Packages whose pin exists for a CORRECTNESS reason rather than a convenience
+# one. Every Dependabot pip entry that watches a file declaring one of these
+# must ignore its major updates, or the boundary gets proposed by a robot that
+# cannot read the comment next to it.
+#
+# numpy earned its place the hard way. #159 bumped it to ~=2.5.3 while carrying
+# `# numpy 2.x silently corrupts joblib models` forward unchanged on the same
+# line. #161 added the ignore to the service entry and MISSED
+# examples/minimal — which trains and serves a joblib model too — so #163
+# arrived the next day proposing exactly the same crossing. A fix scoped to one
+# of two files that share a reason is a control narrower than its surface: the
+# shape this gate exists to reject, reproduced by hand.
+CORRECTNESS_PINNED: dict[str, str] = {
+    "numpy": "numpy 2.x silently corrupts joblib models (D-05)",
+}
+
 # `name spec` on one line, ignoring comments, blank lines, `-r` includes and
 # pip flags. Extras and environment markers are kept out of the name so
 # `foo[bar] ~= 1.0` and `foo ~= 1.0` are recognised as the same distribution.
@@ -155,22 +171,37 @@ def _tracked_requirements() -> list[str]:
     return sorted(line for line in proc.stdout.split() if line)
 
 
-def _dependabot_pip_directories() -> set[str] | None:
-    """Directories the pip ecosystem watches, or None when the file is absent."""
+def _pip_entries() -> list[tuple[set[str], set[str]]] | None:
+    """Per pip entry: (directories it watches, package names it ignores majors for)."""
     if not DEPENDABOT.is_file():
         return None
     doc = yaml.safe_load(DEPENDABOT.read_text(encoding="utf-8")) or {}
-    watched: set[str] = set()
+    entries: list[tuple[set[str], set[str]]] = []
     for entry in doc.get("updates") or []:
         if not isinstance(entry, dict) or entry.get("package-ecosystem") != "pip":
             continue
+        dirs: set[str] = set()
         single = entry.get("directory")
         if isinstance(single, str):
-            watched.add(single.strip("/"))
+            dirs.add(single.strip("/"))
         for many in entry.get("directories") or []:
             if isinstance(many, str):
-                watched.add(many.strip("/"))
-    return watched
+                dirs.add(many.strip("/"))
+        majors_ignored = {
+            str(rule.get("dependency-name", "")).lower()
+            for rule in (entry.get("ignore") or [])
+            if isinstance(rule, dict) and "version-update:semver-major" in (rule.get("update-types") or [])
+        }
+        entries.append((dirs, majors_ignored))
+    return entries
+
+
+def _dependabot_pip_directories() -> set[str] | None:
+    """Every directory the pip ecosystem watches, or None when the file is absent."""
+    entries = _pip_entries()
+    if entries is None:
+        return None
+    return {d for dirs, _ in entries for d in dirs}
 
 
 def main() -> int:
@@ -216,6 +247,23 @@ def main() -> int:
                 "  enforced that until this check."
             )
 
+    entries = _pip_entries()
+    if entries:
+        for pkg, reason in sorted(CORRECTNESS_PINNED.items()):
+            declaring = {str(Path(req).parent).strip("/") for req in tracked if pkg in _declarations(REPO_ROOT / req)}
+            for dirs, majors_ignored in entries:
+                if dirs & declaring and pkg not in majors_ignored:
+                    failures.append(
+                        f"'{pkg}' is declared under {sorted(dirs & declaring)} and that Dependabot\n"
+                        f"  pip entry does not ignore its major updates.\n"
+                        f"  Reason the pin exists: {reason}.\n"
+                        "  Add to that entry:\n"
+                        f'    ignore:\n      - dependency-name: "{pkg}"\n'
+                        '        update-types: ["version-update:semver-major"]\n'
+                        "  A pin with a correctness reason that only a comment defends gets\n"
+                        "  crossed by a robot that cannot read the comment. That happened twice."
+                    )
+
     compared = 0
     for group, (rationale, members) in CO_INSTALLATION_GROUPS.items():
         pins: dict[str, list[tuple[str, str]]] = defaultdict(list)
@@ -253,7 +301,8 @@ def main() -> int:
     print(
         f"[dependency-pins] OK — {len(tracked)} requirements file(s) in "
         f"{len(CO_INSTALLATION_GROUPS)} co-installation group(s); "
-        f"{compared} shared pin(s) agree, all watched by Dependabot."
+        f"{compared} shared pin(s) agree, all watched by Dependabot; "
+        f"{len(CORRECTNESS_PINNED)} correctness-pinned package(s) boundary-protected."
     )
     return 0
 

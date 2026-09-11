@@ -15,6 +15,29 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Fixed — the numpy boundary was defended in one of the two files that share it
+
+- #161 added a Dependabot major-`ignore` for numpy to the service's pip entry
+  and **missed `/examples/minimal`** — which trains *and* serves a joblib model,
+  so *"numpy 2.x silently corrupts joblib models"* (D-05) applies there exactly
+  as it does to the service. #163 arrived the next day proposing the same
+  crossing, red twice over: the D-05 boundary, **and** numpy 2.5.x requires
+  Python ≥ 3.12 while this template declares 3.11+ with 3.11 in the example's
+  CI matrix.
+- **A fix scoped to one of two files that share a reason is a control narrower
+  than its surface** — the shape this repository's gates exist to reject,
+  reproduced by hand, in the very PR that added one of them.
+- So the coverage is now a gate, not a habit.
+  `check_dependency_pin_coherence.py` carries a `CORRECTNESS_PINNED` table and
+  fails when any pip entry watching a file that declares one of those packages
+  does not ignore its major updates. A pin whose reason lives only in a comment
+  gets crossed by a robot that cannot read the comment; that happened twice.
+- Both controls are regression-tested, including the positive one — a fully
+  protected boundary must pass, or the assertion above could be a false alarm.
+  The test fixture derives the protection from the gate's own table, so adding a
+  package to it does not break every unrelated test and invite someone to
+  weaken the check.
+
 ### Changed — MLflow pinned to `~= 3.16.0`, and ADR-047's own conclusion corrected
 
 - The migration is taken. The **twenty** MLflow entries are removed from
