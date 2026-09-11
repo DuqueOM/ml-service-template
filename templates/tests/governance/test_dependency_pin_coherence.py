@@ -33,6 +33,13 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 GATE = REPO_ROOT / "scripts" / "check_dependency_pin_coherence.py"
 
 
+def _correctness_pinned() -> list[str]:
+    """Packages the gate requires a major-ignore for, read from the gate itself."""
+    source = GATE.read_text(encoding="utf-8")
+    block = source.split("CORRECTNESS_PINNED: dict[str, str] = {", 1)[1].split("\n}", 1)[0]
+    return re.findall(r'^\s*"([\w.-]+)":', block, re.M)
+
+
 def _declared_members() -> list[str]:
     """Group membership, read from the gate itself rather than retyped here.
 
@@ -83,10 +90,15 @@ def _sandbox(tmp_path: Path, service: str, eda: str, *, extra: dict[str, str] | 
     # fire in tests that are about pin coherence. Tests that are about coverage
     # overwrite this.
     (root / ".github").mkdir(parents=True, exist_ok=True)
+    # Correctness-pinned packages get their major-ignore here too, derived from
+    # the gate. Otherwise the boundary check fires in every test that is about
+    # something else, and the natural repair is to weaken the boundary check.
     watched = sorted({str(Path(m).parent).strip(".") or "/" for m in members})
     (root / ".github" / "dependabot.yml").write_text(
         "version: 2\nupdates:\n"
-        + "".join(f'  - package-ecosystem: "pip"\n    directory: "/{d.lstrip("/")}"\n' for d in watched),
+        + "".join(
+            f'  - package-ecosystem: "pip"\n    directory: "/{d.lstrip("/")}"\n' + _IGNORE_BLOCK for d in watched
+        ),
         encoding="utf-8",
     )
 
@@ -107,6 +119,10 @@ def _run(root: Path) -> tuple[int, str]:
 
 
 COHERENT_SERVICE = "scikit-learn ~= 1.5.0\npandera ~= 0.23.0\nnumpy ~= 1.26.0\n"
+_IGNORE_BLOCK = "    ignore:\n" + "".join(
+    f'      - dependency-name: "{pkg}"\n        update-types: ["version-update:semver-major"]\n'
+    for pkg in _correctness_pinned()
+)
 COHERENT_EDA = "numpy ~= 1.26.0\nchardet ~= 7.6\n"
 
 
@@ -210,9 +226,8 @@ def test_dependabot_directories_plural_is_understood(tmp_path: Path) -> None:
         '  - package-ecosystem: "pip"\n'
         "    directories:\n"
         '      - "/templates/service"\n'
-        '      - "/templates/service/eda"\n'
-        '  - package-ecosystem: "pip"\n'
-        '    directory: "/examples/minimal"\n',
+        '      - "/templates/service/eda"\n' + _IGNORE_BLOCK + '  - package-ecosystem: "pip"\n'
+        '    directory: "/examples/minimal"\n' + _IGNORE_BLOCK,
         encoding="utf-8",
     )
     subprocess.run(["git", "add", "-A"], cwd=root, check=True)
@@ -220,6 +235,65 @@ def test_dependabot_directories_plural_is_understood(tmp_path: Path) -> None:
     code, out = _run(root)
     assert code == 0, f"a `directories:` (plural) entry was not recognised:\n{out}"
     assert "watched by Dependabot" in out
+
+
+def test_a_correctness_pin_must_be_boundary_protected(tmp_path: Path) -> None:
+    """The gap that produced #163, one day after #161 tried to close it.
+
+    #159 bumped numpy to ~=2.5.3 while carrying
+    `# numpy 2.x silently corrupts joblib models` forward unchanged on the same
+    line. #161 added the major-ignore to the service entry and missed
+    examples/minimal — which trains and serves a joblib model too — so #163
+    arrived proposing exactly the same crossing.
+
+    A fix scoped to one of two files that share a reason is a control narrower
+    than its surface: the shape this gate exists to reject, reproduced by hand.
+    """
+    root = _sandbox(tmp_path, COHERENT_SERVICE + "numpy ~= 1.26.0\n", COHERENT_EDA)
+    (root / ".github").mkdir(parents=True, exist_ok=True)
+    (root / ".github" / "dependabot.yml").write_text(
+        "version: 2\nupdates:\n"
+        '  - package-ecosystem: "pip"\n'
+        "    directories:\n"
+        '      - "/templates/service"\n'
+        '      - "/templates/service/eda"\n'
+        "    ignore:\n"
+        '      - dependency-name: "numpy"\n'
+        '        update-types: ["version-update:semver-major"]\n'
+        '  - package-ecosystem: "pip"\n'
+        '    directory: "/examples/minimal"\n',  # <- the #163 gap
+        encoding="utf-8",
+    )
+    (root / "examples" / "minimal" / "requirements.txt").write_text("numpy ~= 1.26.0\n", encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+
+    code, out = _run(root)
+    assert code == 1, f"an unprotected correctness pin was accepted:\n{out}"
+    assert "numpy" in out
+    assert "examples/minimal" in out
+    assert "correctness reason" in out
+
+
+def test_a_fully_protected_boundary_passes(tmp_path: Path) -> None:
+    """The control. Without it the assertion above could be a false alarm."""
+    root = _sandbox(tmp_path, COHERENT_SERVICE + "numpy ~= 1.26.0\n", COHERENT_EDA)
+    (root / ".github").mkdir(parents=True, exist_ok=True)
+    ignore = '    ignore:\n      - dependency-name: "numpy"\n        update-types: ["version-update:semver-major"]\n'
+    (root / ".github" / "dependabot.yml").write_text(
+        "version: 2\nupdates:\n"
+        '  - package-ecosystem: "pip"\n'
+        "    directories:\n"
+        '      - "/templates/service"\n'
+        '      - "/templates/service/eda"\n' + ignore + '  - package-ecosystem: "pip"\n'
+        '    directory: "/examples/minimal"\n' + ignore,
+        encoding="utf-8",
+    )
+    (root / "examples" / "minimal" / "requirements.txt").write_text("numpy ~= 1.26.0\n", encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+
+    code, out = _run(root)
+    assert code == 0, f"a fully protected boundary was rejected:\n{out}"
+    assert "boundary-protected" in out
 
 
 def test_separate_groups_may_legitimately_differ(tmp_path: Path) -> None:
