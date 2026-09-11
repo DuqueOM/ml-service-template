@@ -15,6 +15,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+*Nothing yet.*
+
+## [v0.27.0] - 2026-09-11
+
+Bump level: **MINOR number, MAJOR-class obligations** (`docs/RELEASING.md` §2.1)
+— scaffolded files and a contract test are renamed.
+Release notes: [`releases/v0.27.0.md`](releases/v0.27.0.md). Adopter actions: [`MIGRATION.md`](MIGRATION.md).
+
 ### Fixed — the numpy boundary was defended in one of the two files that share it
 
 - #161 added a Dependabot major-`ignore` for numpy to the service's pip entry

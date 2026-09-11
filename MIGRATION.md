@@ -17,7 +17,7 @@ contract that prevents future versions from breaking adopters silently.
 
 ---
 
-## v0.26.0 → next (unreleased)
+## v0.26.0 → v0.27.0 (2026-09-11)
 
 | Change | Manual action required |
 | -------- | ------------------------ |

@@ -23,7 +23,7 @@ enterprise guardrails.
 
 ```bash
 # scaffold a new ML service in under a minute
-copier copy --vcs-ref=v0.26.0 https://github.com/DuqueOM/ml-service-template.git ChurnPredictor
+copier copy --vcs-ref=v0.27.0 https://github.com/DuqueOM/ml-service-template.git ChurnPredictor
 # or: git clone + ./templates/scripts/new-service.sh ChurnPredictor churn_predictor
 ```
 
