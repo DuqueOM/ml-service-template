@@ -15,7 +15,43 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
-*Nothing yet.*
+### Fixed — the L3 closed-loop lane had never once been green, and it failed on a warning
+
+- `golden-path-extended.yml` has failed every run it was not skipped on
+  (2026-09-01, 09-08, 09-09). Every `kubectl apply` in it **succeeded** and
+  every resource was created; the step failed on this line:
+
+  ```text
+  Warning: spec.template.spec.containers[0].env[9]: hides previous definition
+  of "ENVIRONMENT", which may be dropped when using apply
+  ```
+
+  The step's tolerance grep excused two known-absent CRDs and **could not tell a
+  warning from an error**, so the warning survived the filter and failed the
+  lane. A lane that fails on a warning teaches people to stop reading it — and
+  it means the previous release's claim of "L3 green" covered `golden-path.yml`
+  only.
+- The warning was also a real defect. The workflow's CI-only patch appended
+  `ENVIRONMENT=ci` to the end of the env list while the `gcp-dev` overlay
+  already set `ENVIRONMENT=dev` at index 3. Reproduced locally:
+  `env[3] = dev`, `env[9] = ci`. Kubernetes keeps **one** of them and only
+  warns, so which value the pod gets is decided by the apply path rather than by
+  the manifest — and `ENVIRONMENT` reaches the MLflow run tag and the log
+  context, so a run can be labelled `dev` while the pod believes it is `ci`.
+- Nothing in the workflow reads the value and the overlay's `dev` is the
+  accurate one for a `gcp-dev` render, so the override is gone. A JSON-6902
+  `add` to `env/-` is the wrong operation for a name that already exists;
+  `replace` at its index would work and is fragile against any change to the
+  base env list.
+- Warnings are now surfaced as `::warning::` annotations and do not fail the
+  step; anything that is neither a warning nor one of the two absent CRDs still
+  does.
+- **`tests/test_no_duplicate_env_vars.py`** renders every overlay with
+  `kubectl kustomize` and fails when any container or init container declares an
+  env name twice. Source-level checking would have missed this entirely: each
+  file is individually correct and the duplicate exists only after the merge. An
+  adopter writing their own overlay patch can reproduce it exactly, and `add` to
+  `env/-` is the natural way to do it wrong.
 
 ## [v0.27.0] - 2026-09-11
 
