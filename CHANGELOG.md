@@ -56,6 +56,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
   `add` to `env/-` is the wrong operation for a name that already exists;
   `replace` at its index would work and is fragile against any change to the
   base env list.
+- **Two more blockers, in the connectivity half.** With the apply fixed the lane
+  advanced to `Wait for /health`, where the pods were **Running, Ready and
+  0-restart** in every previous run and the tunnel was not:
+  - `kubectl port-forward … &` was backgrounded **in its own step**. Actions
+    runs each `run:` in a separate shell and reaps its children at step end, so
+    the tunnel was always dead before the first curl. `curl: (7) Failed to
+    connect to localhost port 8000 after 0 ms` — *"after 0 ms"* is the tell.
+  - it forwarded `8000:8000`, and the Service publishes `port: 80` with
+    `targetPort: 8000`. There is no service port 8000 to forward, so it failed
+    immediately regardless of step boundaries.
+  - `golden-path.yml`'s smoke job has always done it the working way — one
+    step, `18000:80` — and this lane now mirrors it. **Four stacked causes in
+    total**, each hidden behind the previous one, which is why one round-trip
+    per fix was the only way through.
 - Warnings are surfaced as `::warning::` annotations and do not fail the step;
   kubectl's `ensure CRDs are installed first` is tolerated only as the companion
   to the mapping error it always accompanies. Anything else still fails, and now

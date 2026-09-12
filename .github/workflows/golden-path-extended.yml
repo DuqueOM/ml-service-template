@@ -262,17 +262,38 @@ jobs:
       # buffered flush from common_utils/prediction_logger.py is the
       # whole point of D-21).
       # ---------------------------------------------------------------------
-      - name: Port-forward predictor service
+      # ---------------------------------------------------------------------
+      # The audit's Stage 1 contract: post 100 valid + 5 invalid; check the
+      # prediction-log counter. It MUST be at least 100 — the buffered flush in
+      # common_utils/prediction_logger.py is the whole point of D-21.
+      #
+      # ONE step, deliberately. This was four steps, and two of the four
+      # reasons this lane had never been green lived in the split:
+      #
+      #   1. `kubectl port-forward … &` was backgrounded in its own step.
+      #      GitHub Actions runs each `run:` in a separate shell and reaps its
+      #      children when the step ends, so the tunnel was always dead before
+      #      the first curl. `curl: (7) Failed to connect to localhost port
+      #      8000 after 0 ms` — "after 0 ms" is the tell: nothing was listening.
+      #   2. It forwarded `8000:8000`. The Service publishes `port: 80` with
+      #      `targetPort: 8000`, so there is no service port 8000 to forward and
+      #      port-forward failed immediately regardless of step boundaries.
+      #
+      # golden-path.yml's smoke job does it the working way — one step,
+      # `18000:80` — and this now mirrors it. The pods were Running, Ready and
+      # 0-restart in every failed run; the service was never the problem.
+      # ---------------------------------------------------------------------
+      - name: Port-forward, drive traffic, verify the closed-loop counter
         run: |
+          set -euo pipefail
+
           kubectl -n "${SERVICE_SLUG}-dev" port-forward \
-            "svc/${SERVICE_SLUG}-service" "${PORT}:8000" \
+            "svc/${SERVICE_SLUG}-service" "${PORT}:80" \
             >/tmp/portfwd.log 2>&1 &
           echo $! > /tmp/portfwd.pid
-          # Give port-forward a moment to establish
+          trap 'kill "$(cat /tmp/portfwd.pid)" 2>/dev/null || true' EXIT
           sleep 5
 
-      - name: Wait for /health to respond
-        run: |
           set -euo pipefail
           for i in $(seq 1 30); do
             if curl -fsS "http://localhost:${PORT}/health" >/dev/null 2>&1; then
@@ -289,8 +310,6 @@ jobs:
                  kubectl -n "${SERVICE_SLUG}-dev" describe pods; \
                  exit 1; }
 
-      - name: Post 100 valid + 5 invalid requests through /predict
-        run: |
           set -euo pipefail
           # Canonical valid payload — MUST conform to the
           # PredictionRequest schema in templates/service/app/schemas.py.
@@ -328,8 +347,6 @@ jobs:
             exit 1
           fi
 
-      - name: Verify /metrics counter increments
-        run: |
           set -euo pipefail
           # Buffered flush: the logger flushes every N seconds OR every
           # K requests, whichever comes first. Allow a few seconds for
