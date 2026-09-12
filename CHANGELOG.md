@@ -15,6 +15,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Fixed — the image scan caught a new OS CVE three days after it went green
+
+- The Trivy image gate added in v0.27.0 blocked the golden path on `main`:
+
+  ```text
+  Total: 2 (HIGH: 2, CRITICAL: 0)
+  libpcre2-8-0  CVE-2026-86145  HIGH  fixed  10.42-1 → 10.42-1+deb12u1
+                                            out-of-bounds write, arbitrary code
+  libpcre2-8-0  CVE-2026-89161  HIGH  fixed  memory corruption
+  ```
+
+  Neither this Dockerfile nor `requirements.txt` names that package — it arrives
+  with the base image, and the base image lags Debian's security archive. **That
+  is the gate working rather than breaking**: three days after it first went
+  green, two *fixable* HIGHs appeared in the served image and the build stopped.
+  Before the gate existed the image would have shipped them silently.
+- The runtime stage now applies the distro's pending security patches.
+  **Waiting for the upstream base tag to be rebuilt is not a control; it is a
+  hope with a release cadence attached.**
+- Trade-off stated rather than hidden: `apt-get upgrade` makes the OS layer
+  non-reproducible across builds. It already was — `apt-get install` without
+  pinned versions resolves against a moving archive — so this changes the
+  security posture without changing that property. Reproducibility at this layer
+  belongs to a digest-pinned base image, which is its own decision: D-17..D-19
+  pin what *we* publish, not what Debian publishes.
+
 ### Fixed — the L3 closed-loop lane had never once been green, and it failed on a warning
 
 - `golden-path-extended.yml` has failed every run it was not skipped on

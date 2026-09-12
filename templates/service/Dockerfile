@@ -99,9 +99,32 @@ ENV PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:$PATH" \
     MODEL_PATH=models/model.joblib
 
-# Minimal runtime deps (curl for healthcheck, libgomp for lightgbm/xgboost)
+# Minimal runtime deps (curl for healthcheck, libgomp for lightgbm/xgboost),
+# plus the distro's pending security patches.
+#
+# `apt-get upgrade` is here because the base image lags Debian's security
+# archive, and the served image's Trivy gate (CRITICAL,HIGH, --ignore-unfixed)
+# holds the image to what is FIXABLE, not to what the base happens to ship.
+# Measured: three days after that gate first went green, two fixable HIGHs
+# appeared in a package neither this Dockerfile nor requirements.txt names —
+#
+#   libpcre2-8-0  CVE-2026-86145  out-of-bounds write, arbitrary code
+#   libpcre2-8-0  CVE-2026-89161  memory corruption
+#   installed 10.42-1, fixed in 10.42-1+deb12u1
+#
+# — and the gate blocked the build, which is the gate working rather than
+# breaking. Waiting for the upstream base tag to rebuild is not a control; it
+# is a hope with a release cadence attached.
+#
+# The trade-off, stated: this makes the OS layer non-reproducible across
+# builds. It already was — `apt-get install` without pinned versions resolves
+# against a moving archive — so `upgrade` changes the security posture without
+# changing that property. Reproducibility at this layer belongs to a digest-
+# pinned base image, which is a separate decision (D-17..D-19 pin what we
+# publish, not what Debian publishes).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates libgomp1 \
+    && apt-get upgrade -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
