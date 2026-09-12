@@ -143,12 +143,21 @@ jobs:
                   value:
                     name: ALLOW_MODELLESS_STARTUP
                     value: "true"
-                - op: add
-                  path: /spec/template/spec/containers/0/env/-
-                  value:
-                    name: ENVIRONMENT
-                    value: "ci"
           EOF
+          # No ENVIRONMENT append here. This patch used to add
+          # `ENVIRONMENT=ci` to the end of the env list while the gcp-dev
+          # overlay already sets `ENVIRONMENT=dev` at index 3, so the
+          # rendered Deployment carried the name twice and kubectl said so:
+          #
+          #   Warning: spec.template.spec.containers[0].env[9]: hides previous
+          #   definition of "ENVIRONMENT", which may be dropped when using apply
+          #
+          # Nothing in this workflow reads the value, and the overlay's `dev`
+          # is the accurate one for a gcp-dev render. A JSON-6902 `add` to
+          # `env/-` is the wrong operation for a name that already exists; the
+          # right one would be `replace` at its index, which is fragile against
+          # any change to the base env list. Not overriding it at all is
+          # correct and needs no index.
 
       # ---------------------------------------------------------------------
       # Build a minimal image. Same Dockerfile path as golden-path.yml
@@ -202,11 +211,40 @@ jobs:
           apply_rc=$?
           set -e
           cat /tmp/apply.err
+
+          # This tolerance filter assumed ONE stderr line per error. kubectl
+          # emits two for a missing CRD:
+          #
+          #   resource mapping not found for name: "…": no matches for kind
+          #     "AnalysisTemplate" in version "argoproj.io/v1alpha1"
+          #   ensure CRDs are installed first
+          #
+          # The second line carries no kind name, so it survived a filter
+          # keyed on `no matches for kind "(AnalysisTemplate|PrometheusRule)"`
+          # and failed the step. This lane could therefore never have been
+          # green, from its first run — every apply in it succeeded and every
+          # resource was created. A duplicate `ENVIRONMENT` env var later added
+          # a `Warning:` line that survived the same filter, which is a second
+          # cause of the same symptom and was fixed in the patch above.
+          #
+          # Warnings are surfaced and do not fail the step; kubectl's
+          # `ensure CRDs are installed first` is tolerated only as the
+          # companion to a mapping error it always accompanies. Anything else
+          # is a real regression and still fails.
+          if grep -q '^Warning:' /tmp/apply.err; then
+            echo "::warning::kubectl emitted warnings during apply (not fatal):"
+            grep '^Warning:' /tmp/apply.err | sed 's/^/::warning::  /'
+          fi
           if [ "${apply_rc}" -ne 0 ]; then
-            if grep -Ev 'no matches for kind "(AnalysisTemplate|PrometheusRule)"' /tmp/apply.err | grep -q .; then
-              echo "::error::kubectl apply failed for reasons other than known missing CRDs"
+            unexplained=$(grep -Ev \
+              '^Warning:|^ensure CRDs are installed first$|no matches for kind "(AnalysisTemplate|PrometheusRule)"' \
+              /tmp/apply.err || true)
+            if [ -n "${unexplained}" ]; then
+              echo "::error::kubectl apply failed for reasons other than known missing CRDs:"
+              printf '%s\n' "${unexplained}" | sed 's/^/::error::  /'
               exit "${apply_rc}"
             fi
+            echo "::notice::apply exited ${apply_rc}; every stderr line is a tolerated CRD absence"
           fi
           # Hard requirement: namespace + predictor exist
           kubectl get ns "${SERVICE_SLUG}-dev" >/dev/null
@@ -224,17 +262,38 @@ jobs:
       # buffered flush from common_utils/prediction_logger.py is the
       # whole point of D-21).
       # ---------------------------------------------------------------------
-      - name: Port-forward predictor service
+      # ---------------------------------------------------------------------
+      # The audit's Stage 1 contract: post 100 valid + 5 invalid; check the
+      # prediction-log counter. It MUST be at least 100 — the buffered flush in
+      # common_utils/prediction_logger.py is the whole point of D-21.
+      #
+      # ONE step, deliberately. This was four steps, and two of the four
+      # reasons this lane had never been green lived in the split:
+      #
+      #   1. `kubectl port-forward … &` was backgrounded in its own step.
+      #      GitHub Actions runs each `run:` in a separate shell and reaps its
+      #      children when the step ends, so the tunnel was always dead before
+      #      the first curl. `curl: (7) Failed to connect to localhost port
+      #      8000 after 0 ms` — "after 0 ms" is the tell: nothing was listening.
+      #   2. It forwarded `8000:8000`. The Service publishes `port: 80` with
+      #      `targetPort: 8000`, so there is no service port 8000 to forward and
+      #      port-forward failed immediately regardless of step boundaries.
+      #
+      # golden-path.yml's smoke job does it the working way — one step,
+      # `18000:80` — and this now mirrors it. The pods were Running, Ready and
+      # 0-restart in every failed run; the service was never the problem.
+      # ---------------------------------------------------------------------
+      - name: Port-forward, drive traffic, verify the closed-loop counter
         run: |
+          set -euo pipefail
+
           kubectl -n "${SERVICE_SLUG}-dev" port-forward \
-            "svc/${SERVICE_SLUG}-service" "${PORT}:8000" \
+            "svc/${SERVICE_SLUG}-service" "${PORT}:80" \
             >/tmp/portfwd.log 2>&1 &
           echo $! > /tmp/portfwd.pid
-          # Give port-forward a moment to establish
+          trap 'kill "$(cat /tmp/portfwd.pid)" 2>/dev/null || true' EXIT
           sleep 5
 
-      - name: Wait for /health to respond
-        run: |
           set -euo pipefail
           for i in $(seq 1 30); do
             if curl -fsS "http://localhost:${PORT}/health" >/dev/null 2>&1; then
@@ -251,8 +310,6 @@ jobs:
                  kubectl -n "${SERVICE_SLUG}-dev" describe pods; \
                  exit 1; }
 
-      - name: Post 100 valid + 5 invalid requests through /predict
-        run: |
           set -euo pipefail
           # Canonical valid payload — MUST conform to the
           # PredictionRequest schema in templates/service/app/schemas.py.
@@ -290,8 +347,6 @@ jobs:
             exit 1
           fi
 
-      - name: Verify /metrics counter increments
-        run: |
           set -euo pipefail
           # Buffered flush: the logger flushes every N seconds OR every
           # K requests, whichever comes first. Allow a few seconds for
