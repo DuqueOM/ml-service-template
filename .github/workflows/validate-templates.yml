@@ -798,6 +798,13 @@ jobs:
         # rejects a lane that installs the runtime set and then runs pytest.
         run: python3 scripts/check_dependency_partition.py
 
+      - name: Check the deploy contract is documented
+        # A deploy workflow reading a value nobody was told to set fails on the
+        # first real deployment. AWS_BUILD_ROLE_ARN was in that state, and
+        # AWS_ROLE_ARN was documented in the wrong channel — GitHub does not
+        # fall back from secrets to vars, so it arrives empty.
+        run: python3 scripts/check_deploy_contract_documented.py
+
       - name: Check declared config is read (ADR-050)
         # MLflowConfig.tracking_uri was parsed, validated and read by nothing,
         # so the staging/prod tracking servers were decorative. 13 of 51

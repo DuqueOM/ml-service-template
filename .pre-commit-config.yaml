@@ -295,6 +295,18 @@ repos:
         language: system
         pass_filenames: false
         files: ^templates/service/(src/|app/|common_utils/)|^scripts/check_config_is_read\.py$
+      - id: deploy-contract-documented
+        name: every deploy var/secret is documented in the channel it is read from
+        description: |
+          AWS_BUILD_ROLE_ARN is required by deploy-aws.yml's build job to push
+          to ECR and appeared in no runbook. AWS_ROLE_ARN is read from
+          `secrets` while aws-irsa-setup.md said "add repository variables (NOT
+          secrets)". GitHub does not fall back between the two, so the wrong
+          channel arrives as an empty string and fails on the consumer.
+        entry: python3 scripts/check_deploy_contract_documented.py
+        language: system
+        pass_filenames: false
+        files: ^templates/service/\.github/workflows/deploy-|^docs/runbooks/|^docs/.*\.md$|^scripts/check_deploy_contract_documented\.py$
       - id: test-clock-isolation
         name: tests do not depend on the wall clock
         entry: python3 scripts/check_test_clock_isolation.py

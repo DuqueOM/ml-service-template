@@ -156,17 +156,53 @@ For deploy permissions inside the cluster, also map this role into
 the cluster's `aws-auth` ConfigMap so kubectl honors RBAC. See
 `docs/environment-promotion.md` for the cluster-mapping step.
 
-### A.4 Configure GitHub Variables (NOT Secrets)
+### A.4 Configure GitHub Variables and Secrets
 
-Go to: `https://github.com/$GH_OWNER/$GH_REPO/settings/variables/actions`
+Two role ARNs and two channels. Getting the channel wrong is silent: GitHub
+does **not** fall back from `secrets.X` to `vars.X`, so a value set in the
+wrong place arrives as an empty string and
+`aws-actions/configure-aws-credentials` fails with an unhelpful message about
+`role-to-assume`.
 
-Add **repository variables** (NOT secrets — these are not sensitive):
+This section previously said *"repository variables (NOT secrets — these are
+not sensitive)"* and listed `AWS_ROLE_ARN` among them. That reasoning is sound
+— a role ARN is not a credential — but it did not match the shipped workflows,
+which read both role ARNs from `secrets`. An adopter following it exactly got
+an empty `role-to-assume` on their first deploy. `AWS_BUILD_ROLE_ARN` was not
+listed at all.
+
+**Secrets** — `https://github.com/$GH_OWNER/$GH_REPO/settings/secrets/actions`
+
+| Secret | Value | Read by |
+| -------- | ------- | --------- |
+| `AWS_ROLE_ARN` | `arn:aws:iam::${ACCOUNT_ID}:role/${CI_ROLE_NAME}` | the **deploy** jobs, via `deploy-common.yml`'s `workflow_call` secrets contract |
+| `AWS_BUILD_ROLE_ARN` | `arn:aws:iam::${ACCOUNT_ID}:role/${BUILD_ROLE_NAME}` | the **build** job, to push to ECR |
+
+Two roles rather than one is deliberate — ADR-017 / D-31, per-purpose
+identities. The build role needs ECR push and nothing else; the deploy role
+needs EKS access and nothing else. Point them at the same role only if you
+accept that a compromised build step can also deploy.
+
+Use **environment** secrets rather than repository secrets if `dev`, `staging`
+and `prod` should assume different roles, which is the arrangement D-31 is
+asking for. That is also the reason these stay secrets rather than variables:
+environment scoping is the mechanism that makes per-environment roles work, and
+a non-sensitive value in a secret costs nothing.
+
+> **Known asymmetry.** The GCP side reads its equivalents from `vars`
+> (`vars.GCP_SERVICE_ACCOUNT`, `vars.GCP_WIF_PROVIDER`) and its runbook says so
+> consistently. AWS reading role ARNs from `secrets` while GCP reads them from
+> `vars` is a parity gap the template has not resolved; changing it would change
+> `deploy-common.yml`'s `workflow_call` contract, which is adopter-visible and
+> needs its own ADR. `scripts/check_deploy_contract_documented.py` at least
+> guarantees that whichever channel each side uses is the one documented here.
+
+**Variables** — `https://github.com/$GH_OWNER/$GH_REPO/settings/variables/actions`
 
 | Variable | Value |
 | ---------- | ------- |
-| `AWS_ROLE_ARN` | `arn:aws:iam::${ACCOUNT_ID}:role/${CI_ROLE_NAME}` |
 | `AWS_REGION` | e.g. `us-east-1` |
-| `AWS_ACCOUNT_ID` | `${ACCOUNT_ID}` |
+| `AWS_REGISTRY_ID` | `${ACCOUNT_ID}` — the ECR registry account |
 | `EKS_DEV_CLUSTER` | EKS cluster name for dev |
 | `EKS_STAGING_CLUSTER` | EKS cluster name for staging |
 | `EKS_PROD_CLUSTER` | EKS cluster name for prod |
