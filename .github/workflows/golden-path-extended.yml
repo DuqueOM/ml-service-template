@@ -212,25 +212,39 @@ jobs:
           set -e
           cat /tmp/apply.err
 
-          # kubectl writes WARNINGS to stderr too, and this filter could not
-          # tell one from an error. A `Warning: … hides previous definition of
-          # "ENVIRONMENT"` line survived the tolerance grep and failed the
-          # step, which is why this lane had never once been green — the apply
-          # itself succeeded every time, every resource created.
+          # This tolerance filter assumed ONE stderr line per error. kubectl
+          # emits two for a missing CRD:
           #
-          # Warnings are surfaced loudly and do not fail the step. Anything
-          # that is neither a warning nor one of the two CRDs synthetic kind
-          # genuinely lacks is a real regression and still fails.
+          #   resource mapping not found for name: "…": no matches for kind
+          #     "AnalysisTemplate" in version "argoproj.io/v1alpha1"
+          #   ensure CRDs are installed first
+          #
+          # The second line carries no kind name, so it survived a filter
+          # keyed on `no matches for kind "(AnalysisTemplate|PrometheusRule)"`
+          # and failed the step. This lane could therefore never have been
+          # green, from its first run — every apply in it succeeded and every
+          # resource was created. A duplicate `ENVIRONMENT` env var later added
+          # a `Warning:` line that survived the same filter, which is a second
+          # cause of the same symptom and was fixed in the patch above.
+          #
+          # Warnings are surfaced and do not fail the step; kubectl's
+          # `ensure CRDs are installed first` is tolerated only as the
+          # companion to a mapping error it always accompanies. Anything else
+          # is a real regression and still fails.
           if grep -q '^Warning:' /tmp/apply.err; then
             echo "::warning::kubectl emitted warnings during apply (not fatal):"
             grep '^Warning:' /tmp/apply.err | sed 's/^/::warning::  /'
           fi
           if [ "${apply_rc}" -ne 0 ]; then
-            if grep -Ev '^Warning:|no matches for kind "(AnalysisTemplate|PrometheusRule)"' /tmp/apply.err \
-                 | grep -q .; then
-              echo "::error::kubectl apply failed for reasons other than known missing CRDs"
+            unexplained=$(grep -Ev \
+              '^Warning:|^ensure CRDs are installed first$|no matches for kind "(AnalysisTemplate|PrometheusRule)"' \
+              /tmp/apply.err || true)
+            if [ -n "${unexplained}" ]; then
+              echo "::error::kubectl apply failed for reasons other than known missing CRDs:"
+              printf '%s\n' "${unexplained}" | sed 's/^/::error::  /'
               exit "${apply_rc}"
             fi
+            echo "::notice::apply exited ${apply_rc}; every stderr line is a tolerated CRD absence"
           fi
           # Hard requirement: namespace + predictor exist
           kubectl get ns "${SERVICE_SLUG}-dev" >/dev/null

@@ -19,18 +19,31 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 - `golden-path-extended.yml` has failed every run it was not skipped on
   (2026-09-01, 09-08, 09-09). Every `kubectl apply` in it **succeeded** and
-  every resource was created; the step failed on this line:
+  every resource was created. **Two independent causes, same symptom**, and the
+  first one means the lane could never have been green from its very first run.
+- **The tolerance filter assumed one stderr line per error. kubectl emits two.**
+
+  ```text
+  resource mapping not found for name: "…": no matches for kind
+    "AnalysisTemplate" in version "argoproj.io/v1alpha1"
+  ensure CRDs are installed first          ← no kind name, survives the filter
+  ```
+
+  The filter was keyed on `no matches for kind "(AnalysisTemplate|PrometheusRule)"`,
+  so the companion line got through and failed the step every time. My first
+  diagnosis stopped at the second cause below and missed this one; re-running the
+  lane with that fix in place is what surfaced it.
+- **The second cause: it could not tell a warning from an error.** A duplicate
+  `ENVIRONMENT` env var produced
 
   ```text
   Warning: spec.template.spec.containers[0].env[9]: hides previous definition
   of "ENVIRONMENT", which may be dropped when using apply
   ```
 
-  The step's tolerance grep excused two known-absent CRDs and **could not tell a
-  warning from an error**, so the warning survived the filter and failed the
-  lane. A lane that fails on a warning teaches people to stop reading it — and
-  it means the previous release's claim of "L3 green" covered `golden-path.yml`
-  only.
+  which survived the same filter. A lane that fails on a warning teaches people
+  to stop reading it — and it means v0.27.0's claim of "L3 green" covered
+  `golden-path.yml` only.
 - The warning was also a real defect. The workflow's CI-only patch appended
   `ENVIRONMENT=ci` to the end of the env list while the `gcp-dev` overlay
   already set `ENVIRONMENT=dev` at index 3. Reproduced locally:
@@ -43,9 +56,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
   `add` to `env/-` is the wrong operation for a name that already exists;
   `replace` at its index would work and is fragile against any change to the
   base env list.
-- Warnings are now surfaced as `::warning::` annotations and do not fail the
-  step; anything that is neither a warning nor one of the two absent CRDs still
-  does.
+- Warnings are surfaced as `::warning::` annotations and do not fail the step;
+  kubectl's `ensure CRDs are installed first` is tolerated only as the companion
+  to the mapping error it always accompanies. Anything else still fails, and now
+  the failure **prints the unexplained lines** instead of only asserting they
+  exist. Verified against the exact recorded stderr: nothing unexplained, and a
+  synthetic `Error from server (Forbidden)` still fails.
 - **`tests/test_no_duplicate_env_vars.py`** renders every overlay with
   `kubectl kustomize` and fails when any container or init container declares an
   env name twice. Source-level checking would have missed this entirely: each
