@@ -177,12 +177,12 @@ def main() -> int:
         print("FAIL: the deploy contract does not match what an adopter is told to configure.")
         print()
         for name in undocumented:
-            channels = "/".join(sorted(referenced[name]))
-            print(f"  - {name} is read from `{channels}` and documented nowhere.")
+            read_channels = "/".join(sorted(referenced[name]))
+            print(f"  - {name} is read from `{read_channels}` and documented nowhere.")
             print("      An adopter completes the runbook, starts their first deploy, and it")
             print("      fails on a value they have never heard of.")
-        for name, read_from, documented, where in mismatched:
-            print(f"  - {name} is read from `{read_from}.{name}` but documented under {documented}")
+        for name, read_from, doc_channel, where in mismatched:
+            print(f"  - {name} is read from `{read_from}.{name}` but documented under {doc_channel}")
             print(f"      in {where}.")
             print("      GitHub does NOT fall back between the two: the value arrives empty.")
         print()
