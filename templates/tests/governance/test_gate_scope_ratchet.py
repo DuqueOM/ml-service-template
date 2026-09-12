@@ -2,7 +2,7 @@
 
 Why this exists
 ---------------
-This repository relies on eighteen gates to detect its own drift, and **none of
+This repository relies on nineteen gates to detect its own drift, and **none of
 them was tested**. `grep -rl "import scripts"` over both test trees returned
 nothing. Every control that catches a regression could itself regress, silently.
 
@@ -78,6 +78,7 @@ SCOPE: dict[str, tuple[str, int, str]] = {
     "check_dependency_pin_coherence": (r"OK — (\d+) requirements file", 6, "requirements files grouped"),
     "check_dependency_partition": (r"OK — (\d+) runtime module", 16, "runtime modules walked"),
     "check_config_is_read": (r"OK — (\d+) declared field", 51, "config fields checked"),
+    "check_deploy_contract_documented": (r"OK — (\d+) name\(s\)", 15, "deploy names checked"),
 }
 
 # Gates whose success line carries no scope number, with the reason. Their exit
@@ -118,7 +119,7 @@ def _run(gate: str) -> tuple[int, str]:
 def test_gate_list_was_discovered() -> None:
     """An empty parametrize set is reported as a pass; make it a failure."""
     assert GATES, f"no GATES found in {MAKEFILE} — this whole module would check nothing"
-    assert len(GATES) >= 18, f"only {len(GATES)} gates discovered; the suite has had 18 since 2026-09-10"
+    assert len(GATES) >= 19, f"only {len(GATES)} gates discovered; the suite has had 19 since 2026-09-12"
 
 
 def test_every_gate_is_accounted_for() -> None:

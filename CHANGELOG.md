@@ -83,6 +83,45 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
   adopter writing their own overlay patch can reproduce it exactly, and `add` to
   `env/-` is the natural way to do it wrong.
 
+### Fixed — two AWS deploy values an adopter could not have known to set
+
+Nobody has completed an L4 deployment, so nobody had found these. Both fail on
+the **first** real AWS deploy, and neither was detectable, because nothing
+compared what the workflows read against what the runbooks tell an adopter to
+configure.
+
+- **`AWS_BUILD_ROLE_ARN` appeared in no runbook.** `deploy-aws.yml`'s build job
+  reads it from `secrets` to authenticate to ECR. An adopter could complete
+  `aws-irsa-setup.md` end to end, start their first deploy, and have the build
+  job fail on a secret they had never heard of. Two roles rather than one is
+  deliberate — ADR-017 / D-31, per-purpose identities — and the second one was
+  simply never written down.
+- **`AWS_ROLE_ARN` was documented in the wrong channel.** It is read from
+  `secrets`, and §A.4 said *"Add repository variables (NOT secrets — these are
+  not sensitive)"* and listed it among them. The reasoning is sound; the code
+  disagreed. **GitHub does not fall back from `secrets.X` to `vars.X`** — the
+  value arrives as an empty string, so `role-to-assume` fails with a message
+  about the consumer. This half is the more dangerous one: a missing secret at
+  least looks unset, while a value in the wrong channel looks configured.
+- The GCP side was consistent throughout — its runbook says variables and its
+  workflow reads `vars` — which is what makes the AWS mismatch drift rather
+  than design. The parity gap itself (AWS role ARNs in `secrets`, GCP's in
+  `vars`) is recorded in the runbook as a known asymmetry: closing it would
+  change `deploy-common.yml`'s `workflow_call` contract, which is
+  adopter-visible and needs its own ADR.
+- **`scripts/check_deploy_contract_documented.py`** (gate 19) asserts every
+  `vars.*`/`secrets.*` a shipped deploy workflow reads is documented **and in
+  the channel it is read from**. The channel check is table-scoped and exact: a
+  markdown table whose first header cell is `Secret` or `Variable` declares the
+  channel for its first column, and nothing else counts.
+- That precision was the second attempt. A proximity heuristic — nearest
+  preceding heading containing "secret" or "variable" — produced **eleven false
+  positives** against a tree with one real mismatch, because any document using
+  the word "secret" in a sentence before listing a variable was flagged. A
+  control that is wrong eleven times out of twelve sends its reader to edit
+  documentation that was already right. One of the six regression tests pins
+  that precision rather than the detection.
+
 ## [v0.27.0] - 2026-09-11
 
 Bump level: **MINOR number, MAJOR-class obligations** (`docs/RELEASING.md` §2.1)
