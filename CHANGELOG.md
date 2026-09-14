@@ -15,6 +15,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+*Nothing yet.*
+
+## [v0.28.0] - 2026-09-12
+
+Bump level: **MINOR** (`docs/RELEASING.md` §1.2) — adds a file to the
+scaffolded output and corrects adopter-facing setup instructions, so §1.1
+PATCH does not apply.
+Release notes: [`releases/v0.28.0.md`](releases/v0.28.0.md).
+Adopter actions: [`MIGRATION.md`](MIGRATION.md).
+
 ### Fixed — the image scan caught a new OS CVE three days after it went green
 
 - The Trivy image gate added in v0.27.0 blocked the golden path on `main`:

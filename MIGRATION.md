@@ -17,6 +17,16 @@ contract that prevents future versions from breaking adopters silently.
 
 ---
 
+## v0.27.0 → v0.28.0 (2026-09-12)
+
+| Change | Manual action required |
+| -------- | ------------------------ |
+| **`aws-irsa-setup.md` §A.4 was wrong about where two values go** | **Re-read it before your first AWS deploy.** It said *"Add repository variables (NOT secrets)"* and listed `AWS_ROLE_ARN` among them; the shipped workflows read it from `secrets`, and **GitHub does not fall back from `secrets.X` to `vars.X`** — the value arrives as an empty string and `role-to-assume` fails with a message about the consumer. And `AWS_BUILD_ROLE_ARN`, which `deploy-aws.yml`'s build job needs to push to ECR, appeared in **no** runbook at all. If you configured AWS from the old §A.4, move `AWS_ROLE_ARN` to Secrets and add `AWS_BUILD_ROLE_ARN`. The GCP side was correct throughout and needs nothing. |
+| **The runtime image now applies the distro's pending security patches** | None — your next `docker build` picks it up. The served image's Trivy gate holds it to what is *fixable*, and the base image lags Debian's security archive: three days after that gate went green, two fixable HIGHs appeared in `libpcre2-8-0` (CVE-2026-86145, CVE-2026-89161) and the build stopped. If you pin your own base image by digest, you own this layer and should apply the equivalent. |
+| **New payload test `tests/test_no_duplicate_env_vars.py`** | None. It renders every overlay and fails when a container declares an env var twice — Kubernetes keeps one and only warns, so which value the pod gets is otherwise decided by the apply path. If your own overlay patch appends to `/…/env/-` a name the base already sets, this will now tell you. |
+
+---
+
 ## v0.26.0 → v0.27.0 (2026-09-11)
 
 | Change | Manual action required |
