@@ -64,7 +64,9 @@ jobs:
           # Multi-service adopters can replace SERVICES with service-root pairs.
           for SERVICE in {@ service_kebab @}; do
             IMAGE="${{ env.REGISTRY }}/${SERVICE}-predictor:${{ steps.version.outputs.v }}"
-            docker build -t "$IMAGE" .
+            # CLOUD_PROVIDER installs the secret-manager SDK the pods read
+            # API_KEY with (ADR-051); without it auth-enabled envs answer 503.
+            docker build --build-arg CLOUD_PROVIDER=aws -t "$IMAGE" .
             docker push "$IMAGE"
           done
 

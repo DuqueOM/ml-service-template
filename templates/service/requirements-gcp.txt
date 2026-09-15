@@ -1,0 +1,11 @@
+# Cloud secret backend for GKE images — ADR-051.
+#
+# Installed on top of requirements.txt ONLY when the image is built with
+# `--build-arg CLOUD_PROVIDER=gcp`, which deploy-gcp.yml does. Local, CI and
+# golden-path images do not carry it: common_utils.secrets imports it lazily
+# and only staging/production resolve secrets from the cloud.
+#
+# Before this file existed no image carried a cloud SDK at all, so every
+# staging/production lookup raised "required for GCP backend" and an
+# auth-enabled /predict could never succeed.
+google-cloud-secret-manager ~= 2.30.0

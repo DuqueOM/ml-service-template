@@ -40,3 +40,10 @@ spec:
               value: "{REGION}"
             - name: ENVIRONMENT
               value: "dev"
+            # Runtime secret addressing (ADR-051). SECRETS_PREFIX must reproduce
+            # Terraform's secret name, <project_name>/<service>/<secret>; replace {PROJECT_NAME}
+            # with the Terraform `project_name` variable.
+            - name: CLOUD_PROVIDER
+              value: "aws"
+            - name: SECRETS_PREFIX
+              value: "{PROJECT_NAME}/{@ service_kebab @}"

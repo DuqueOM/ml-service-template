@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Iterator
 
 import pytest
 
@@ -21,7 +22,9 @@ from common_utils.secrets import (
     _detect_cloud,
     _detect_environment,
     _load_dotenv_local,
+    clear_cache,
     get_secret,
+    secret_id,
 )
 
 
@@ -29,10 +32,19 @@ from common_utils.secrets import (
 # Helpers
 # ---------------------------------------------------------------------------
 @pytest.fixture(autouse=True)
-def _isolate_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Each test starts with a clean environment + cleared dotenv cache."""
+def _isolate_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Each test starts AND ends with a clean environment and cleared caches.
+
+    Clearing only on entry leaked the last test's parsed ``.env.local`` into
+    whatever ran next in the session: ``test_auth.py`` then compared a request
+    against this file's sentinel instead of its own key and got 401 — but only
+    when this module happened to be collected first.
+    """
     for var in (
         "ENV",
+        "ENVIRONMENT",
+        "APP_ENV",
+        "SECRETS_CACHE_TTL_SECONDS",
         "CLOUD_PROVIDER",
         "GITHUB_ACTIONS",
         "KUBERNETES_SERVICE_HOST",
@@ -43,6 +55,10 @@ def _isolate_env(monkeypatch: pytest.MonkeyPatch) -> None:
     ):
         monkeypatch.delenv(var, raising=False)
     _load_dotenv_local.cache_clear()
+    clear_cache()
+    yield
+    _load_dotenv_local.cache_clear()
+    clear_cache()
 
 
 # ---------------------------------------------------------------------------
@@ -66,6 +82,18 @@ class TestDetectEnvironment:
     def test_explicit_env_var(self, monkeypatch: pytest.MonkeyPatch, env_value: str, expected: str) -> None:
         monkeypatch.setenv("ENV", env_value)
         assert _detect_environment() == expected
+
+    @pytest.mark.parametrize("variable", ["ENVIRONMENT", "APP_ENV"])
+    def test_overlay_variable_names_are_honoured(self, monkeypatch: pytest.MonkeyPatch, variable: str) -> None:
+        """Every overlay sets ENVIRONMENT; reading only ENV sent prod pods down the heuristic."""
+        monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "10.0.0.1")
+        monkeypatch.setenv(variable, "production")
+        assert _detect_environment() == "production"
+
+    def test_env_takes_precedence_over_environment(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("ENV", "ci")
+        monkeypatch.setenv("ENVIRONMENT", "production")
+        assert _detect_environment() == "ci"
 
     def test_github_actions_heuristic(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("GITHUB_ACTIONS", "true")
@@ -184,33 +212,25 @@ class TestProductionInvariants:
         with pytest.raises(SecretBackendError, match="CLOUD_PROVIDER not detected"):
             get_secret("API_KEY")
 
-    def test_aws_backend_invoked_when_cloud_aws(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("ENV", "production")
-        monkeypatch.setenv("CLOUD_PROVIDER", "aws")
-        called = {}
+    @pytest.mark.parametrize(
+        ("cloud", "expected_id"),
+        [("aws", "acme/fraud-detector/api_key"), ("gcp", "acme-fraud-detector-api_key")],
+    )
+    def test_cloud_backend_receives_terraform_secret_id(
+        self, monkeypatch: pytest.MonkeyPatch, cloud: str, expected_id: str
+    ) -> None:
+        monkeypatch.setenv("ENVIRONMENT", "production")
+        monkeypatch.setenv("CLOUD_PROVIDER", cloud)
+        prefix = "acme/fraud-detector" if cloud == "aws" else "acme-fraud-detector"
+        called: list[str] = []
 
-        def _fake_get_aws(key: str, namespace: str | None) -> str:
-            called["key"] = key
-            called["namespace"] = namespace
-            return "from_aws"
+        def _fake(resolved_id: str) -> str:
+            called.append(resolved_id)
+            return f"from_{cloud}"
 
-        monkeypatch.setattr(secrets, "_get_aws", _fake_get_aws)
-        assert get_secret("API_KEY", namespace="fraud") == "from_aws"
-        assert called == {"key": "API_KEY", "namespace": "fraud"}
-
-    def test_gcp_backend_invoked_when_cloud_gcp(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("ENV", "production")
-        monkeypatch.setenv("CLOUD_PROVIDER", "gcp")
-        called = {}
-
-        def _fake_get_gcp(key: str, namespace: str | None) -> str:
-            called["key"] = key
-            called["namespace"] = namespace
-            return "from_gcp"
-
-        monkeypatch.setattr(secrets, "_get_gcp", _fake_get_gcp)
-        assert get_secret("API_KEY", namespace="fraud") == "from_gcp"
-        assert called == {"key": "API_KEY", "namespace": "fraud"}
+        monkeypatch.setattr(secrets, f"_get_{cloud}", _fake)
+        assert get_secret("API_KEY", namespace=prefix) == f"from_{cloud}"
+        assert called == [expected_id]
 
     def test_default_returned_on_miss_in_staging(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ENV", "staging")
@@ -249,3 +269,123 @@ class TestD17NeverLogValue:
                 if key in {"args", "msg", "message"}:
                     continue
                 assert sentinel not in str(val), f"Secret leaked into log record field {key!r}: {val!r}"
+
+
+# ---------------------------------------------------------------------------
+# ADR-051 — secret addressing, not-found mapping, caching
+# ---------------------------------------------------------------------------
+class TestSecretId:
+    @pytest.mark.parametrize(
+        ("key", "namespace", "cloud", "expected"),
+        [
+            ("API_KEY", "acme-svc", "gcp", "acme-svc-api_key"),
+            ("API_KEY", "acme/svc", "aws", "acme/svc/api_key"),
+            ("ADMIN_API_KEY", None, "gcp", "admin_api_key"),
+        ],
+    )
+    def test_scheme(self, key: str, namespace: str | None, cloud: str, expected: str) -> None:
+        assert secret_id(key, namespace, cloud) == expected
+
+
+class _FakeClientError(Exception):
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.response = {"Error": {"Code": code}}
+
+
+class NotFound(Exception):
+    """Same class name as google.api_core.exceptions.NotFound."""
+
+
+class TestNotFoundMapping:
+    def test_aws_resource_not_found_is_a_miss_not_a_backend_fault(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        class _Client:
+            def get_secret_value(self, SecretId: str) -> dict:
+                raise _FakeClientError("ResourceNotFoundException")
+
+        monkeypatch.setattr(secrets, "_aws_client", lambda: _Client())
+        with pytest.raises(SecretNotFoundError):
+            secrets._get_aws("acme/svc/api_key")
+
+    def test_aws_access_denied_stays_a_backend_fault(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        class _Client:
+            def get_secret_value(self, SecretId: str) -> dict:
+                raise _FakeClientError("AccessDeniedException")
+
+        monkeypatch.setattr(secrets, "_aws_client", lambda: _Client())
+        with pytest.raises(SecretBackendError, match="acme/svc/api_key"):
+            secrets._get_aws("acme/svc/api_key")
+
+    def test_gcp_not_found_is_a_miss(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        class _Client:
+            def access_secret_version(self, request: dict) -> None:
+                raise NotFound("gone")
+
+        monkeypatch.setenv("GCP_PROJECT_ID", "proj")
+        monkeypatch.setattr(secrets, "_gcp_client", lambda: _Client())
+        with pytest.raises(SecretNotFoundError):
+            secrets._get_gcp("acme-svc-api_key")
+
+    def test_gcp_project_unresolvable_is_a_backend_fault(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(secrets, "_gcp_client", lambda: object())
+        import builtins
+
+        real_import = builtins.__import__
+
+        def _no_google_auth(name: str, *args: object, **kwargs: object) -> object:
+            if name.startswith("google.auth") or name == "google":
+                raise ImportError(name)
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", _no_google_auth)
+        with pytest.raises(SecretBackendError, match="GCP project not resolvable"):
+            secrets._get_gcp("acme-svc-api_key")
+
+
+class TestCloudCache:
+    def _count_calls(self, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+        calls: list[str] = []
+
+        def _fake(resolved_id: str) -> str:
+            calls.append(resolved_id)
+            return f"value-{len(calls)}"
+
+        monkeypatch.setenv("ENVIRONMENT", "production")
+        monkeypatch.setenv("CLOUD_PROVIDER", "gcp")
+        monkeypatch.setattr(secrets, "_get_gcp", _fake)
+        return calls
+
+    def test_repeat_lookups_within_ttl_hit_the_backend_once(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls = self._count_calls(monkeypatch)
+        assert get_secret("API_KEY", namespace="p-s") == get_secret("API_KEY", namespace="p-s") == "value-1"
+        assert calls == ["p-s-api_key"]
+
+    def test_expired_entry_is_refetched(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls = self._count_calls(monkeypatch)
+        clock = iter([100.0, 100.0 + 301.0])
+        monkeypatch.setattr(secrets.time, "monotonic", lambda: next(clock))
+        get_secret("API_KEY", namespace="p-s")
+        assert get_secret("API_KEY", namespace="p-s") == "value-2"
+        assert len(calls) == 2
+
+    def test_ttl_zero_disables_the_cache(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls = self._count_calls(monkeypatch)
+        monkeypatch.setenv("SECRETS_CACHE_TTL_SECONDS", "0")
+        get_secret("API_KEY", namespace="p-s")
+        get_secret("API_KEY", namespace="p-s")
+        assert len(calls) == 2
+
+    def test_a_miss_is_not_cached(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("ENVIRONMENT", "production")
+        monkeypatch.setenv("CLOUD_PROVIDER", "aws")
+        outcomes = iter([SecretNotFoundError("not yet"), "provisioned"])
+
+        def _fake(resolved_id: str) -> str:
+            outcome = next(outcomes)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+        monkeypatch.setattr(secrets, "_get_aws", _fake)
+        assert get_secret("API_KEY", namespace="p/s", default=None) is None
+        assert get_secret("API_KEY", namespace="p/s") == "provisioned"

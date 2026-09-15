@@ -18,7 +18,9 @@ spec:
           labels:
             app: "{@ service_kebab @}-drift"
         spec:
-          serviceAccountName: "{@ service_kebab @}-sa"
+          # Per-purpose identity (ADR-017): Terraform binds the drift GSA / IRSA
+          # role to this ServiceAccount, not to the predictor's.
+          serviceAccountName: "{@ service_kebab @}-drift-sa"
           restartPolicy: Never
 
           # ------------------------------------------------------------------

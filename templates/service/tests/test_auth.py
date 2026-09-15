@@ -92,6 +92,58 @@ class TestApiAuthEnabled:
         assert response.status_code == 401
 
 
+class TestCloudSecretResolution:
+    """Staging/production resolve API_KEY from the cloud secret manager (ADR-051)."""
+
+    @pytest.fixture
+    def cloud_client(self, monkeypatch: pytest.MonkeyPatch, client: TestClient) -> Iterator[TestClient]:
+        import common_utils.secrets as secrets
+
+        monkeypatch.setenv("API_AUTH_ENABLED", "true")
+        monkeypatch.setenv("ENVIRONMENT", "production")
+        monkeypatch.delenv("ENV", raising=False)
+        monkeypatch.delenv("API_KEY", raising=False)
+        secrets.clear_cache()
+        yield client
+        secrets.clear_cache()
+
+    def test_prefix_addresses_the_terraform_secret(
+        self, monkeypatch: pytest.MonkeyPatch, cloud_client: TestClient, valid_payload: dict
+    ) -> None:
+        import common_utils.secrets as secrets
+
+        monkeypatch.setenv("CLOUD_PROVIDER", "aws")
+        monkeypatch.setenv("SECRETS_PREFIX", "acme/fraud-detector")
+        requested: list[str] = []
+
+        def _fake_aws(resolved_id: str) -> str:
+            requested.append(resolved_id)
+            return "cloud-key"
+
+        monkeypatch.setattr(secrets, "_get_aws", _fake_aws)
+        ok = cloud_client.post("/predict", json=valid_payload, headers={"X-API-Key": "cloud-key"})
+        # The deploy smoke probe's contract: a resolvable secret rejects a wrong key with 401.
+        wrong = cloud_client.post("/predict", json=valid_payload, headers={"X-API-Key": "deploy-smoke"})
+        assert (ok.status_code, wrong.status_code) == (200, 401)
+        assert set(requested) == {"acme/fraud-detector/api_key"}
+
+    def test_backend_fault_fails_closed_with_503(
+        self, monkeypatch: pytest.MonkeyPatch, cloud_client: TestClient, valid_payload: dict
+    ) -> None:
+        import common_utils.secrets as secrets
+
+        monkeypatch.setenv("CLOUD_PROVIDER", "gcp")
+        monkeypatch.setenv("SECRETS_PREFIX", "acme-fraud-detector")
+
+        def _unbound_identity(resolved_id: str) -> str:
+            raise secrets.SecretBackendError(f"PermissionDenied reading {resolved_id}")
+
+        monkeypatch.setattr(secrets, "_get_gcp", _unbound_identity)
+        response = cloud_client.post("/predict", json=valid_payload, headers={"X-API-Key": "anything"})
+        assert response.status_code == 503
+        assert "PermissionDenied" not in response.text
+
+
 # ---------------------------------------------------------------------------
 # require_admin
 # ---------------------------------------------------------------------------

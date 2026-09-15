@@ -8,8 +8,9 @@
 # retrain (shared infrastructure identities).
 #
 # Each entry in var.service_names gets:
-#   * an IAM role assumable by the K8s ServiceAccount of the same
-#     name in namespace `ml-services`, via the EKS OIDC provider;
+#   * an IAM role assumable by the K8s ServiceAccount `<service>-sa`
+#     in namespace `<service>-<dev|staging|prod>`, via the EKS OIDC
+#     provider — the names the Kustomize overlays create (ADR-051);
 #   * an inline policy with the *minimum* permissions the template's
 #     standard service shape needs:
 #         - read on the data bucket (ingest features)
@@ -30,8 +31,9 @@
 #
 # To deploy a real service:
 #   1. Add its name to var.service_names.
-#   2. Annotate its K8s ServiceAccount:
-#        eks.amazonaws.com/role-arn: <output of this role's ARN>
+#   2. Its overlays already annotate `<service>-sa` with
+#        arn:aws:iam::<account>:role/<project_name>-<service>-irsa-<environment>
+#      — replace the {AWS_ACCOUNT_ID} and {PROJECT_NAME} placeholders.
 # =============================================================================
 
 # OIDC issuer hostname (without the https:// prefix). The trust policy
@@ -44,11 +46,13 @@ locals {
     "",
   )
 
-  # ml-services is the canonical namespace for the template's
-  # services. Overlays may pin a different namespace via
-  # serviceaccount.yaml; if you change this, update the trust
-  # policy below.
-  service_namespace = "ml-services"
+  # Kubernetes coordinates of each service's pods, derived exactly as the
+  # Kustomize overlays name them: namespace `<service>-<dev|staging|prod>`,
+  # ServiceAccounts `<service>-sa` (runtime) and `<service>-drift-sa` /
+  # `<service>-retrain-sa` (ADR-017). Terraform says `production` where the
+  # overlays say `prod`. A binding to any other name is a binding to nothing:
+  # the pod gets no cloud identity and fails at model download (ADR-051).
+  k8s_env_suffix = var.environment == "production" ? "prod" : var.environment
 }
 
 resource "aws_iam_role" "service" {
@@ -70,7 +74,7 @@ resource "aws_iam_role" "service" {
           # provider client_id_list); `sub` must match the exact
           # ServiceAccount.
           "${local.oidc_issuer_host}:aud" = "sts.amazonaws.com"
-          "${local.oidc_issuer_host}:sub" = "system:serviceaccount:${local.service_namespace}:${each.value}"
+          "${local.oidc_issuer_host}:sub" = "system:serviceaccount:${each.value}-${local.k8s_env_suffix}:${each.value}-sa"
         }
       }
     }]

@@ -143,12 +143,24 @@ resource "google_storage_bucket_iam_member" "runtime_mlflow_viewer" {
   member = "serviceAccount:${google_service_account.runtime.email}"
 }
 
-# Workload Identity binding: K8s SA in `ml-services` namespace impersonates this GSA.
-# Service name is parameterized so per-service bindings can override.
+locals {
+  # Kubernetes coordinates of each service's pods, derived exactly as the
+  # Kustomize overlays name them: namespace `<service>-<dev|staging|prod>`,
+  # ServiceAccounts `<service>-sa` (runtime) and `<service>-drift-sa` /
+  # `<service>-retrain-sa` (ADR-017). Terraform says `production` where the
+  # overlays say `prod`. A binding to any other name is a binding to nothing:
+  # the pod gets no cloud identity and fails at model download (ADR-051).
+  k8s_env_suffix = var.environment == "production" ? "prod" : var.environment
+}
+
+# Workload Identity binding: each service's runtime KSA impersonates this GSA.
+# The overlays annotate `<service>-sa` with this GSA's email (ADR-051).
 resource "google_service_account_iam_member" "runtime_workload_identity" {
+  for_each = toset(var.service_names)
+
   service_account_id = google_service_account.runtime.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "serviceAccount:${var.project_id}.svc.id.goog[ml-services/${var.project_name}-sa]"
+  member             = "serviceAccount:${var.project_id}.svc.id.goog[${each.value}-${local.k8s_env_suffix}/${each.value}-sa]"
 }
 
 # ---------------------------------------------------------------------------
@@ -182,9 +194,11 @@ resource "google_storage_bucket_iam_member" "drift_data_viewer" {
 }
 
 resource "google_service_account_iam_member" "drift_workload_identity" {
+  for_each = toset(var.service_names)
+
   service_account_id = google_service_account.drift.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "serviceAccount:${var.project_id}.svc.id.goog[ml-services/${var.project_name}-drift-sa]"
+  member             = "serviceAccount:${var.project_id}.svc.id.goog[${each.value}-${local.k8s_env_suffix}/${each.value}-drift-sa]"
 }
 
 # ---------------------------------------------------------------------------
@@ -208,10 +222,15 @@ resource "google_storage_bucket_iam_member" "retrain_models_creator" {
   member = "serviceAccount:${google_service_account.retrain.email}"
 }
 
+# No manifest in the template runs as `<service>-retrain-sa` yet: retraining
+# runs in GitHub Actions. The binding is kept on the same naming contract so an
+# adopter-supplied in-cluster retrain Job needs a ServiceAccount, not Terraform.
 resource "google_service_account_iam_member" "retrain_workload_identity" {
+  for_each = toset(var.service_names)
+
   service_account_id = google_service_account.retrain.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "serviceAccount:${var.project_id}.svc.id.goog[ml-services/${var.project_name}-retrain-sa]"
+  member             = "serviceAccount:${var.project_id}.svc.id.goog[${each.value}-${local.k8s_env_suffix}/${each.value}-retrain-sa]"
 }
 
 # ---------------------------------------------------------------------------

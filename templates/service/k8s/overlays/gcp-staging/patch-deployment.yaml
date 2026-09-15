@@ -43,6 +43,13 @@ spec:
               value: "INFO"
             - name: ENVIRONMENT
               value: "staging"
+            # Runtime secret addressing (ADR-051). SECRETS_PREFIX must reproduce
+            # Terraform's secret name, <project_name>-<service>-<secret>; replace {PROJECT_NAME}
+            # with the Terraform `project_name` variable.
+            - name: CLOUD_PROVIDER
+              value: "gcp"
+            - name: SECRETS_PREFIX
+              value: "{PROJECT_NAME}-{@ service_kebab @}"
             # API auth + admin endpoint controls (PR-R2-1 + PR-R2-3, ADR-016).
             # ADMIN_API_ENABLED may be true in staging only when the
             # operator is performing a hot-reload drill; default off.

@@ -11,7 +11,7 @@
 # Deploy:
 #   kustomize build k8s/overlays/gcp-prod/ | kubectl apply -f -
 #
-# TODO: Replace {PROJECT_ID}, {REGION}, {@ service_slug @} with your actual values.
+# TODO: Replace {PROJECT_ID}, {REGION}, {PROJECT_NAME} (Terraform project_name) with your actual values.
 # =============================================================================
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -43,6 +43,7 @@ images:
 patches:
   - path: patch-deployment.yaml
   - path: patch-serviceaccount.yaml
+  - path: patch-serviceaccount-drift.yaml
   # R5-M3: narrow NetworkPolicy cloud-storage egress from 0.0.0.0/0 to
   # GCP private-googleapis CIDRs. Non-dev MUST carry this patch;
   # tests/test_networkpolicy_egress_hygiene.py fails otherwise.

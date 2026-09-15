@@ -36,6 +36,7 @@ images:
 patches:
   - path: patch-deployment.yaml
   - path: patch-serviceaccount.yaml
+  - path: patch-serviceaccount-drift.yaml
   # R5-M3: narrow NetworkPolicy cloud-storage egress from 0.0.0.0/0 to
   # GCP private-googleapis CIDRs. Non-dev MUST carry this patch;
   # tests/test_networkpolicy_egress_hygiene.py fails otherwise.

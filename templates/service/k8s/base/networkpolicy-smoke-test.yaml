@@ -1,0 +1,65 @@
+# NetworkPolicy — the post-deploy smoke test's path to the predictor.
+#
+# `networkpolicy-deny-default.yaml` selects every pod in the namespace, and
+# `networkpolicy.yaml` admits only the ingress controller and Prometheus. The
+# smoke pod that deploy-common.yml launches in this namespace therefore had no
+# egress (not even DNS) and the predictor had no ingress rule for it: on any
+# cluster that enforces NetworkPolicy (GKE Dataplane V2, EKS with the VPC CNI
+# policy agent) the smoke test could only time out. kind does not enforce
+# policies, which is why the golden path never saw it.
+#
+# Both halves key on one label, set only by the smoke step:
+#   app.kubernetes.io/component: deploy-smoke-test
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: "{@ service_kebab @}-allow-smoke-test-ingress"
+  labels:
+    app: "{@ service_kebab @}"
+    managed-by: kustomize
+spec:
+  podSelector:
+    matchLabels:
+      app: "{@ service_kebab @}"
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: deploy-smoke-test
+      ports:
+        - protocol: TCP
+          port: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: "{@ service_kebab @}-smoke-test-egress"
+  labels:
+    app: "{@ service_kebab @}"
+    managed-by: kustomize
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: deploy-smoke-test
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - podSelector:
+            matchLabels:
+              app: "{@ service_kebab @}"
+      ports:
+        - protocol: TCP
+          port: 8000

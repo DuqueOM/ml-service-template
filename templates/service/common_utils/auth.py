@@ -43,7 +43,8 @@ from typing import Optional
 
 from fastapi import Header, HTTPException, status
 
-from common_utils.secrets import SecretNotFoundError, get_secret
+from common_utils.secrets import SecretBackendError, SecretNotFoundError, get_secret
+from common_utils.secrets import _detect_environment as _secrets_detect_environment
 
 logger = logging.getLogger(__name__)
 
@@ -68,33 +69,35 @@ def _extract_token(api_key_header: str | None, authorization_header: str | None)
 
 
 def _detect_environment() -> str:
-    """Mirror :mod:`common_utils.secrets` env detection without a circular import.
+    """The environment :mod:`common_utils.secrets` resolves against.
 
-    Accepts ``ENV`` (canonical, used by :mod:`common_utils.secrets`),
-    ``ENVIRONMENT``, or ``APP_ENV`` and normalises common aliases.
+    Delegates rather than mirroring: two detectors that disagreed are how an
+    overlay setting ``ENVIRONMENT=production`` produced a pod whose auth layer
+    said "production" while its secret loader said "staging".
     """
-    raw = (os.getenv("ENV") or os.getenv("ENVIRONMENT") or os.getenv("APP_ENV") or "local").lower()
-    if raw in {"local", "dev", "development"}:
-        return "local"
-    if raw in {"ci", "test"}:
-        return "ci"
-    if raw in {"staging", "stage"}:
-        return "staging"
-    if raw in {"production", "prod"}:
-        return "production"
-    return "local"
+    return _secrets_detect_environment()
+
+
+def _secret_namespace() -> str | None:
+    """Cloud secret prefix set by the overlay (``SECRETS_PREFIX``, ADR-051)."""
+    return os.getenv("SECRETS_PREFIX") or None
 
 
 def _resolve_secret(key: str, *, namespace: str | None) -> str | None:
     """Best-effort secret lookup. Returns ``None`` if the secret is unset.
 
-    Raises :class:`SecretBackendError` only when the backend itself is
-    misconfigured — a missing secret in dev/CI degrades to
-    ``API_AUTH_ENABLED=false`` semantics rather than crashing every test.
+    A backend fault (SDK missing, identity not bound, project unresolvable)
+    also returns ``None`` after logging its cause, so callers fail CLOSED with
+    a 503 in staging/production instead of surfacing an unhandled 500 — the
+    caller's missing-secret branch already owns that decision.
     """
     try:
         return get_secret(key, namespace=namespace, default=None)
     except SecretNotFoundError:
+        return None
+    except SecretBackendError as exc:
+        # The message names the secret id and the error type, never a value.
+        logger.error("Secret backend failed resolving %s: %s", key, exc)
         return None
 
 
@@ -137,7 +140,7 @@ def verify_api_key(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    namespace = os.getenv("SERVICE_METRIC_PREFIX") or os.getenv("SERVICE_NAME")
+    namespace = _secret_namespace()
     expected = _resolve_secret("API_KEY", namespace=namespace)
     if not expected:
         # Misconfiguration: auth is on but no key is provisioned.
@@ -145,7 +148,9 @@ def verify_api_key(
         # warning so dev iteration isn't blocked.
         env = _detect_environment()
         if env in {"staging", "production"}:
-            logger.error("API_AUTH_ENABLED=true but API_KEY secret is missing in %s", env)
+            logger.error(
+                "API_AUTH_ENABLED=true but API_KEY is not resolvable in %s (SECRETS_PREFIX=%r)", env, namespace
+            )
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Authentication service misconfigured.",
@@ -185,7 +190,7 @@ def require_admin(
         # Hidden endpoint: pretend it doesn't exist.
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
 
-    namespace = os.getenv("SERVICE_METRIC_PREFIX") or os.getenv("SERVICE_NAME")
+    namespace = _secret_namespace()
     expected = _resolve_secret("ADMIN_API_KEY", namespace=namespace)
     env = _detect_environment()
     if not expected:

@@ -1,10 +1,10 @@
 # Runbook — Secrets Manager Integration End-to-End
 
-- **Authority**: ADR-020 §S2-5, R4 audit finding M1.
+- **Authority**: ADR-051 (runtime identity and secret addressing), ADR-020 §S2-5, R4 audit finding M1.
 - **Mode**: CONSULT (touches secret managers but only via existing helpers; no rotation).
-- **Scope**: validate that `templates/service/common_utils/secrets.py` correctly reads from GCP Secret Manager (GSM) and
-  AWS Secrets Manager (ASM) end-to-end, in dev / staging / prod, without ever falling through to `os.environ` in non-dev
-  environments (D-17).
+- **Scope**: validate that `templates/service/common_utils/secrets.py` reads the secret Terraform created, from GCP
+  Secret Manager (GSM) and AWS Secrets Manager (ASM), and never falls through to `os.environ` outside local and CI
+  (D-18).
 - **Approver**: Platform Lead.
 - **Audit trail**: each successful execution writes an entry to `VALIDATION_LOG.md`.
 
@@ -12,20 +12,35 @@
 
 ## Why this runbook exists
 
-R4 finding M1 flagged that `common_utils/secrets.py` was implemented and
-unit-tested but had never been exercised against a real cloud secrets
-manager end-to-end. The pattern this prevents is the v1.10 / v1.12
-class: "the helper looks correct, no one has confirmed it works against
-the live service."
+R4 finding M1 flagged that `common_utils/secrets.py` was unit-tested but had never run against a real secret manager.
+The previous version of this runbook could not have closed it. It set `MLOPS_ENV`, which the loader never read, and
+called `get_secret(..., backend=...)`, a parameter that never existed, so every procedure failed with `TypeError`.
+
+The secret ids were also wrong in a way no local test could catch. The loader asked for `<slug>-API_KEY`, while
+Terraform creates `<project>-<service>-api_key`. ADR-051 records the naming contract, and
+`tests/test_runtime_identity_contract.py` asserts it. This runbook proves the live half.
 
 ---
 
 ## Pre-conditions
 
-- `gcloud` CLI authenticated to a GCP project with `roles/secretmanager.secretAccessor` granted to your user.
-- `aws` CLI authenticated to an AWS account with `secretsmanager:GetSecretValue` granted.
-- A non-production project / account for both clouds; **never run against prod for this runbook**.
-- Python 3.11 with `templates/service` installed editable (`pip install -e .`).
+- Terraform applied for a **non-production** environment, so the per-service secrets exist.
+- `gcloud` authenticated with `roles/secretmanager.secretAccessor` on the project, and `aws` authenticated with
+  `secretsmanager:GetSecretValue` on the `<project_name>/<service>/*` scope.
+- A Python 3.11 environment where the service's `common_utils` is importable, from the generated service's root.
+- The cloud SDK for the procedure you run:
+
+```bash
+pip install -r requirements-gcp.txt   # Procedure 1
+pip install -r requirements-aws.txt   # Procedure 2
+```
+
+Set the names once. They must match the Terraform variables and the overlay's `SECRETS_PREFIX`:
+
+```bash
+PROJECT_NAME="<terraform project_name>"
+SERVICE="<service-kebab-name>"
+```
 
 ---
 
@@ -33,96 +48,92 @@ the live service."
 
 ```bash
 PROJECT_ID="$(gcloud config get-value project)"
-SECRET_ID="r4-secrets-runbook-test"
-SECRET_VALUE_FILE="$(mktemp)"
-echo "this-is-a-test-secret-DO-NOT-USE-IN-PROD" > "$SECRET_VALUE_FILE"
+SECRET_ID="${PROJECT_NAME}-${SERVICE}-api_key"
 
-# 1. Create the secret + version (idempotent retry-safe).
-gcloud secrets create "$SECRET_ID" --replication-policy=automatic 2>/dev/null || true
-gcloud secrets versions add "$SECRET_ID" --data-file="$SECRET_VALUE_FILE"
+# 1. Add a version to the Terraform-created secret. Terraform creates the
+#    secret, never its value, so the payload never enters state.
+openssl rand -hex 32 | tr -d '\n' | gcloud secrets versions add "$SECRET_ID" --data-file=-
 
-# 2. Read via the template helper. Set MLOPS_ENV explicitly so the helper
-# refuses os.environ fallback in staging/prod regardless of caller env.
-MLOPS_ENV=staging \
-GCP_PROJECT_ID="$PROJECT_ID" \
+# 2. Resolve it exactly as a staging pod does.
+ENVIRONMENT=staging CLOUD_PROVIDER=gcp GCP_PROJECT_ID="$PROJECT_ID" \
+SECRETS_PREFIX="${PROJECT_NAME}-${SERVICE}" \
 python -c "
+import os
 from common_utils.secrets import get_secret
-v = get_secret('$SECRET_ID', backend='gcp')
-print('len=%d, prefix=%s' % (len(v), v[:8]))
+v = get_secret('API_KEY', namespace=os.environ['SECRETS_PREFIX'])
+print('OK: resolved len=%d' % len(v))
 "
 
-# 3. Negative test — request a non-existent secret. Helper must raise,
-# never silently fall through to os.environ.
-MLOPS_ENV=staging \
-GCP_PROJECT_ID="$PROJECT_ID" \
+# 3. Negative: a secret Terraform did not create is a miss, not a fallback.
+ENVIRONMENT=staging CLOUD_PROVIDER=gcp GCP_PROJECT_ID="$PROJECT_ID" API_KEY=must-not-be-returned \
 python -c "
 from common_utils.secrets import get_secret, SecretNotFoundError
 try:
-    get_secret('does-not-exist-r4', backend='gcp')
+    get_secret('API_KEY', namespace='does-not-exist-r4')
     print('FAIL: expected SecretNotFoundError')
-except SecretNotFoundError as e:
-    print('OK: refused to fall back, error=%s' % e)
+except SecretNotFoundError:
+    print('OK: miss raised; os.environ was not consulted')
 "
-
-# 4. Cleanup.
-gcloud secrets delete "$SECRET_ID" --quiet
-rm -f "$SECRET_VALUE_FILE"
 ```
 
-Expected output: `len=` non-zero on step 2; `OK: refused to fall back` on step 3.
+Expected output is `OK: resolved len=64` on step 2 and `OK: miss raised` on step 3. Never print the value itself.
 
 ## Procedure 2 — ASM end-to-end
 
 ```bash
-SECRET_NAME="r4-secrets-runbook-test"
-aws secretsmanager create-secret --name "$SECRET_NAME" \
-  --secret-string "this-is-a-test-secret-DO-NOT-USE-IN-PROD" \
-  >/dev/null 2>&1 || \
-  aws secretsmanager update-secret --secret-id "$SECRET_NAME" \
-    --secret-string "this-is-a-test-secret-DO-NOT-USE-IN-PROD" >/dev/null
+SECRET_ID="${PROJECT_NAME}/${SERVICE}/api_key"
 
-MLOPS_ENV=staging \
+aws secretsmanager put-secret-value --secret-id "$SECRET_ID" \
+  --secret-string "$(openssl rand -hex 32)" >/dev/null
+
+ENVIRONMENT=staging CLOUD_PROVIDER=aws SECRETS_PREFIX="${PROJECT_NAME}/${SERVICE}" \
 python -c "
+import os
 from common_utils.secrets import get_secret
-v = get_secret('$SECRET_NAME', backend='aws')
-print('len=%d, prefix=%s' % (len(v), v[:8]))
+v = get_secret('API_KEY', namespace=os.environ['SECRETS_PREFIX'])
+print('OK: resolved len=%d' % len(v))
 "
 
-# Negative test — same shape as Procedure 1 step 3.
-MLOPS_ENV=staging \
+ENVIRONMENT=staging CLOUD_PROVIDER=aws API_KEY=must-not-be-returned \
 python -c "
 from common_utils.secrets import get_secret, SecretNotFoundError
 try:
-    get_secret('does-not-exist-r4', backend='aws')
+    get_secret('API_KEY', namespace='does-not-exist-r4')
     print('FAIL: expected SecretNotFoundError')
-except SecretNotFoundError as e:
-    print('OK: refused to fall back, error=%s' % e)
+except SecretNotFoundError:
+    print('OK: miss raised; os.environ was not consulted')
 "
-
-aws secretsmanager delete-secret --secret-id "$SECRET_NAME" --force-delete-without-recovery >/dev/null
 ```
 
-## Procedure 3 — `os.environ` refusal in non-dev
-
-This procedure validates the D-17 invariant: `secrets.py` MUST refuse
-to read from `os.environ` when `MLOPS_ENV ∈ {staging, production}`.
+## Procedure 3 — `os.environ` refusal outside local and CI
 
 ```bash
-# Set a bogus env var that the helper would have read in dev.
-MLOPS_ENV=production R4_TEST_SECRET=should-be-refused \
+ENVIRONMENT=production R4_TEST_SECRET=should-be-refused \
 python -c "
-from common_utils.secrets import get_secret
 import sys
+from common_utils.secrets import get_secret, SecretBackendError
 try:
-    v = get_secret('R4_TEST_SECRET')  # default backend env / dev only
-    print('FAIL: returned %r in production mode' % v)
+    v = get_secret('R4_TEST_SECRET')
+    print('FAIL: returned a value in production mode')
     sys.exit(1)
-except Exception as e:
+except SecretBackendError as e:
     print('OK: refused — %s' % type(e).__name__)
 "
 ```
 
-Expected: helper raises (refuses fallback); exit 0.
+With no `CLOUD_PROVIDER`, the helper must refuse. Expected output is `OK: refused — SecretBackendError`.
+
+## Procedure 4 — from inside the cluster
+
+Procedures 1 and 2 prove the names and the SDK. They do not prove the pod's identity binding. Deploy to staging and
+read the `Post-deploy smoke test` step of `deploy-common.yml`:
+
+```text
+✓ auth path verified: API_KEY resolved from the secret manager and a wrong key was rejected
+```
+
+A 503 there means the pod could not resolve the secret. Check, in order: `SECRETS_PREFIX` in the overlay, that the
+secret has an enabled version, and the ServiceAccount annotation against `terraform output`.
 
 ---
 
@@ -130,16 +141,17 @@ Expected: helper raises (refuses fallback); exit 0.
 
 For each successful procedure, write a `VALIDATION_LOG.md` entry with:
 
-- Date + operator + cloud project / account ID.
+- Date, operator, and cloud project or account ID, truncated.
 - Helper version (`git rev-parse HEAD` at the time of the run).
-- Output excerpts (no actual secret value).
+- Output excerpts. Never a secret value.
 - Latency observation (cold call, warm call) if material.
 
 ## Acceptance criteria for closing M1
 
-- [ ] Procedure 1 (GSM) executed with `OK` outputs on steps 2 and 3.
-- [ ] Procedure 2 (ASM) executed with `OK` outputs on both calls.
+- [ ] Procedure 1 (GSM) executed with `OK` on steps 2 and 3.
+- [ ] Procedure 2 (ASM) executed with `OK` on both calls.
 - [ ] Procedure 3 (`os.environ` refusal) executed and the helper refused.
+- [ ] Procedure 4 smoke line observed in a staging deploy on at least one cloud.
 - [ ] `VALIDATION_LOG.md` entry recorded.
 
 ## Cadence
