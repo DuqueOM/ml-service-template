@@ -30,6 +30,7 @@ NC     := \033[0m
 SERVICE_SLUG ?= {@ service_slug @}
 MODEL_PATH   ?= models/model.joblib
 DATA_PATH    ?= data/raw/dataset.csv
+EDA_TARGET   ?= target
 IMAGE_TAG    ?= $(SERVICE_SLUG):latest
 VERSION      ?= latest
 CLOUD        ?= gcp
@@ -239,13 +240,9 @@ new-service: ## Scaffold a new ML service (NAME=PascalCase SLUG=snake_case)
 	fi
 	bash templates/scripts/new-service.sh $(NAME) $(SLUG)
 
-eda: ## Run 6-phase EDA pipeline on data/raw/
-	@echo "$(GREEN)Running EDA pipeline...$(NC)"
-	@if [ -f eda/run_eda.py ]; then \
-		python eda/run_eda.py; \
-	else \
-		echo "$(YELLOW)See eda/README.md for the 6-phase pipeline.$(NC)"; \
-	fi
+eda: ## Run the 6-phase EDA pipeline (DATA_PATH=..., EDA_TARGET=...)
+	@echo "$(GREEN)Running EDA pipeline on $(DATA_PATH) (target: $(EDA_TARGET))...$(NC)"
+	python eda/eda_pipeline.py --input $(DATA_PATH) --target $(EDA_TARGET)
 
 drift-check: ## Run reproducible drift drill against data/production/
 	@echo "$(GREEN)Running drift drill...$(NC)"
