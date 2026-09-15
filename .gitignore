@@ -49,6 +49,9 @@ venv/
 env/
 ENV/
 .env
+# Local secrets read by common_utils.secrets (local profile only). Never commit.
+.env.local
+.env.*.local
 !.env.example
 
 # ─── ML artifacts (never commit models or data) ──────

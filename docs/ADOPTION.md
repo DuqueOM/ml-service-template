@@ -156,7 +156,7 @@ underlying CLI tool plus the corresponding human runbook:
 | `rollback` | `make rollback` + `docs/runbooks/rollback.md` |
 | `drift-detection` | `templates/service/scripts/drills/run_drift_drill.py` + `docs/runbooks/drift-detection.md` |
 | `model-retrain` | `make retrain` + `docs/runbooks/model-retrain.md` |
-| `eda-analysis` | `eda/run_eda.py` + `eda/README.md` |
+| `eda-analysis` | `eda/eda_pipeline.py` + `eda/README.md` |
 | `cost-audit` | `make cost-review` + `docs/runbooks/cost-review.md` |
 | `security-audit` | `make security-audit` (gitleaks + bandit + trivy) |
 | `secret-breach-response` | `make secret-breach-check` + `docs/runbooks/secret-breach.md` |

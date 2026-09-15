@@ -50,6 +50,19 @@ Four layers each chose a name, and no two chose the same one. See
 - `test_secrets.py` leaked a cached `.env.local` into later tests, so
   `test_auth.py` failed depending on collection order.
 
+### Fixed — local use
+
+- `.env.local` was not gitignored, in this repository or the generated service.
+  `common_utils.secrets` reads it in the local profile and documents it as
+  "not committed", but nothing enforced that.
+- `.env.example` suggested `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` for
+  local DVC. It now points at ambient credentials (`gcloud auth
+  application-default login`, or `aws sso login` plus `AWS_PROFILE`), per D-17
+  and D-35.
+- `make eda` looked for `eda/run_eda.py`, which does not exist, and printed a
+  hint instead of running. It now runs `eda/eda_pipeline.py` with its required
+  `--input` and `--target`, exposed as `DATA_PATH` and `EDA_TARGET`.
+
 ### Added
 
 - `tests/test_runtime_identity_contract.py`. It evaluates Terraform
