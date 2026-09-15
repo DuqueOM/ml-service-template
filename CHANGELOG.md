@@ -15,7 +15,56 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
-*Nothing yet.*
+### Fixed — no staging or production pod could authenticate a request, and the deploy went green
+
+Four layers each chose a name, and no two chose the same one. See
+[ADR-051](docs/decisions/ADR-051-runtime-identity-and-secret-addressing.md).
+
+- **Workload identity was bound to nothing, on both clouds.** Terraform bound
+  GCP Workload Identity to `ml-services/<project>-sa` and trusted
+  `system:serviceaccount:ml-services:<service>` for IRSA. Pods run as
+  `<service>-sa` in `<service>-<env>`. The overlays annotated a GSA and an IAM
+  role that Terraform never creates. Terraform now derives every binding and
+  trust subject from the overlay coordinates. The overlays name the identities
+  Terraform creates, and `var.environment` is validated.
+- **The drift CronJob ran as the predictor's identity.** It now runs as
+  `<service>-drift-sa`, which is what ADR-017's drift identity is bound to.
+  The AWS drift role can also read the `latest.csv` object the job downloads.
+- **The secret loader asked for names nothing creates.** It requested
+  `<slug>-API_KEY`, while Terraform creates `<project>-<service>-api_key`. It
+  read `ENV`, while the overlays set `ENVIRONMENT`. It detected no cloud on
+  GKE, and no image carried a cloud SDK. Overlays now set `CLOUD_PROVIDER` and
+  `SECRETS_PREFIX`. `secret_id()` reproduces Terraform's scheme, and deploy
+  images are built with their cloud's SDK. Lookups are cached with a TTL. A
+  backend fault fails closed with 503 instead of an unhandled 500.
+- **The smoke test could see none of it, and could not have run.** It probed
+  only `/ready`. Its tag-pinned pod is rejected by Kyverno in staging and
+  production, and it lacked the PSS `restricted` securityContext prod
+  enforces. NetworkPolicy default-deny also blocked it both ways. It is now
+  digest-pinned, restricted, and admitted by `networkpolicy-smoke-test.yaml`.
+  It probes `/model/info` with a deliberately wrong key: 401 proves the secret
+  resolved, 503 fails the deploy.
+- `docs/runbooks/secrets-integration-e2e.md` could not run. It set a variable
+  the loader never read and passed an argument that does not exist. It is
+  rewritten against the real API, with an in-cluster procedure.
+- `test_secrets.py` leaked a cached `.env.local` into later tests, so
+  `test_auth.py` failed depending on collection order.
+
+### Added
+
+- `tests/test_runtime_identity_contract.py`. It evaluates Terraform
+  interpolations against every cloud overlay: binding, annotation, secret
+  name, IAM scope, smoke admissibility and image backend. It keeps no hand-kept
+  table of names. On the pre-fix tree it fails all 22 cases, each on its own
+  defect.
+- `requirements-gcp.txt` and `requirements-aws.txt`, installed only for cloud
+  images through `--build-arg CLOUD_PROVIDER`.
+
+### Security
+
+- The runtime Role no longer grants `secrets: get`. Nothing reads Kubernetes
+  Secrets, and the grant was standing access for the "external-secrets"
+  integration a comment claimed and no manifest shipped.
 
 ## [v0.28.0] - 2026-09-12
 

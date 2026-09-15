@@ -44,4 +44,5 @@ resources:
   - analysistemplate-champion-challenger.yaml
   - networkpolicy.yaml
   - networkpolicy-deny-default.yaml
+  - networkpolicy-smoke-test.yaml
   - rbac.yaml

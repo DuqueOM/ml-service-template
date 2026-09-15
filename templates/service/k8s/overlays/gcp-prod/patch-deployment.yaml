@@ -6,7 +6,7 @@
 # - Workload Identity for GCS access (no hardcoded credentials)
 # - 2 replicas minimum (D-27 PDB allows minAvailable=1 only with replicas>=2)
 #
-# TODO: Replace {MODEL_BUCKET}, {@ service_slug @} with your actual values.
+# TODO: Replace {MODEL_BUCKET} and {PROJECT_NAME} (Terraform project_name) with your actual values.
 # TODO: Adjust resource requests/limits from profiling data.
 # =============================================================================
 apiVersion: apps/v1
@@ -59,9 +59,17 @@ spec:
               value: "INFO"
             - name: ENVIRONMENT
               value: "production"
+            # Runtime secret addressing (ADR-051). SECRETS_PREFIX must reproduce
+            # Terraform's secret name, <project_name>-<service>-<secret>; replace {PROJECT_NAME}
+            # with the Terraform `project_name` variable.
+            - name: CLOUD_PROVIDER
+              value: "gcp"
+            - name: SECRETS_PREFIX
+              value: "{PROJECT_NAME}-{@ service_kebab @}"
             # API auth + admin endpoint controls (PR-R2-1 + PR-R2-3, ADR-016)
-            # API_KEY is mounted via `envFrom: secretRef: api-keys` in the
-            # secret patch (TODO operator: provision the Secret).
+            # API_KEY is read from the cloud secret manager through the pod's
+            # workload identity (common_utils.secrets, ADR-051) — never from a
+            # Kubernetes Secret. Provision it with `gcloud secrets versions add`.
             # ADMIN_API_ENABLED stays false in prod; rotation requires
             # `/secret-breach` workflow if exposure is suspected.
             - name: API_AUTH_ENABLED

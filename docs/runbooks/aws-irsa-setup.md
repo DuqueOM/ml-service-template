@@ -285,17 +285,24 @@ aws iam put-role-policy --role-name "$SVC_ROLE_NAME" \
 
 ### B.3 Annotate the K8s ServiceAccount
 
-In your service's K8s manifests (`templates/service/k8s/base/serviceaccount.yaml`):
+If you applied `infra/terraform/aws`, it created these roles already, and B.1 and B.2 are only the manual
+equivalent. The overlays annotate the ServiceAccounts for you. Replace two placeholders in each
+`k8s/overlays/aws-*/patch-serviceaccount.yaml` and `patch-serviceaccount-drift.yaml`: `{AWS_ACCOUNT_ID}`, and
+`{PROJECT_NAME}` with the Terraform `project_name`. Each environment's overlay then names the role for that
+environment:
 
 ```yaml
-apiVersion: v1
-kind: ServiceAccount
+# k8s/overlays/aws-staging/patch-serviceaccount.yaml
 metadata:
   name: {service-name}-sa
-  namespace: {namespace}
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/SVC_ROLE_NAME
+    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/PROJECT_NAME-{service-name}-irsa-staging
 ```
+
+The names are one contract (ADR-051). Terraform's trust policy allows exactly
+`system:serviceaccount:{service-name}-staging:{service-name}-sa`, and the drift role allows only
+`{service-name}-drift-sa`. `tests/test_runtime_identity_contract.py` fails if an overlay and Terraform disagree.
+If you create roles by hand, use these names or the pods get no identity.
 
 The pod-identity-webhook injects AWS_ROLE_ARN +
 AWS_WEB_IDENTITY_TOKEN_FILE env vars + a projected SA token. The

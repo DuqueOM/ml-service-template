@@ -16,7 +16,7 @@ Numbering is dense and gaps are deliberate — a withdrawn ADR keeps its
 number and says so, rather than being deleted and leaving a hole
 (`scripts/check_doc_coherence.py` C5 enforces this).
 
-**50 decisions recorded.**
+**51 decisions recorded.**
 
 | ADR | Decision |
 | --- | --- |
@@ -70,3 +70,4 @@ number and says so, rather than being deleted and leaving a hole
 | 048 | [Requirements files that share an environment must agree on their pins](ADR-048-requirements-co-installation-groups.md) |
 | 049 | [The served image installs only what it runs](ADR-049-runtime-training-dependency-partition.md) |
 | 050 | [Configuration a generated service declares must be read, or say it is not](ADR-050-configuration-must-be-read.md) |
+| 051 | [Runtime identity and secret addressing are one naming contract, asserted end to end](ADR-051-runtime-identity-and-secret-addressing.md) |

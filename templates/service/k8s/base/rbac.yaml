@@ -1,6 +1,9 @@
 # RBAC — Role-Based Access Control for ML service
 # Principle of least privilege: the service account can only read
-# ConfigMaps and Secrets in its own namespace.
+# ConfigMaps in its own namespace. It has NO access to Kubernetes Secrets:
+# runtime secrets come from the cloud secret manager through workload
+# identity (common_utils.secrets, ADR-051), so a `secrets: get` grant here
+# would be standing access that nothing uses.
 #
 # For enterprise environments (fintech, healthcare), RBAC is mandatory.
 #
@@ -24,11 +27,6 @@ rules:
   - apiGroups: [""]
     resources: ["configmaps"]
     verbs: ["get", "list", "watch"]
-
-  # Read Secrets (e.g., API keys injected by external-secrets)
-  - apiGroups: [""]
-    resources: ["secrets"]
-    verbs: ["get"]
 
   # No write access — pods should never modify K8s resources
 

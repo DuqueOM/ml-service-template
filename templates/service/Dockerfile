@@ -50,7 +50,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Runtime requirements only — see the header. Copying requirements-train.txt
 # or requirements-dev.txt here would silently undo the partition, so don't.
-COPY requirements.txt ./
+# The per-cloud files carry only the secret-manager SDK (ADR-051) and are
+# installed when CLOUD_PROVIDER names that cloud.
+ARG CLOUD_PROVIDER=""
+COPY requirements.txt requirements-gcp.txt requirements-aws.txt ./
 
 # Install into a venv for clean multi-stage copy
 # xgboost/lightgbm --no-deps avoids pulling nvidia-nccl-cu12 (~290MB)
@@ -74,6 +77,11 @@ RUN set -e && \
     . /opt/venv/bin/activate && \
     pip install --upgrade pip setuptools wheel && \
     pip install --no-cache-dir --no-compile -r requirements.txt && \
+    case "${CLOUD_PROVIDER}" in \
+      "") ;; \
+      gcp|aws) pip install --no-cache-dir --no-compile -r "requirements-${CLOUD_PROVIDER}.txt" ;; \
+      *) echo "CLOUD_PROVIDER must be empty, gcp or aws (got '${CLOUD_PROVIDER}')" >&2; exit 1 ;; \
+    esac && \
     # Uncomment if using xgboost/lightgbm:
     # pip install --no-cache-dir --no-deps "xgboost>=1.5.0,<3.0" && \
     # pip install --no-cache-dir --no-deps "lightgbm>=4.0.0,<5.0" && \
@@ -204,6 +212,14 @@ COPY --chown=appuser:appuser common_utils/ ./common_utils/
 RUN /opt/venv/bin/python -c "import app.main, common_utils.prediction_logger, common_utils.input_validation, common_utils.secrets" \
     && /opt/venv/bin/python -c "import {@ service_slug @}.training.features, {@ service_slug @}.monitoring.drift_detection, {@ service_slug @}.monitoring.performance_monitor" \
     && echo "runtime import smoke OK"
+
+# A cloud image that cannot import its secret backend would pass the smoke
+# above and then answer every authenticated request with 503 (ADR-051).
+ARG CLOUD_PROVIDER=""
+RUN case "${CLOUD_PROVIDER}" in \
+      gcp) /opt/venv/bin/python -c "import google.auth, google.cloud.secretmanager" ;; \
+      aws) /opt/venv/bin/python -c "import boto3" ;; \
+    esac && echo "cloud secret backend smoke OK (${CLOUD_PROVIDER:-none})"
 
 # Create runtime directories (models downloaded by K8s init container)
 RUN mkdir -p logs data/raw data/processed data/reference models results && \

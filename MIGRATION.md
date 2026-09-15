@@ -17,6 +17,22 @@ contract that prevents future versions from breaking adopters silently.
 
 ---
 
+## v0.28.0 → next (unreleased)
+
+| Change | Manual action required |
+| -------- | ------------------------ |
+| **Overlays name the cloud identities Terraform creates** (ADR-051) | **Replace `{PROJECT_NAME}` in every `gcp-*` and `aws-*` overlay** with your Terraform `project_name`. It appears in `patch-serviceaccount.yaml`, the new `patch-serviceaccount-drift.yaml` and `patch-deployment.yaml` (`SECRETS_PREFIX`). The previous annotations named a GSA (`<service>-sa@…`) and IAM role (`<service>-irsa-role`) that Terraform never created, so if you kept them, your pods had no cloud identity. If you created identities by hand under those names, either rename them or point the annotations at them and keep `tests/test_runtime_identity_contract.py` green. |
+| **Workload Identity and IRSA bindings target `<service>-<env>/<service>-sa`** | **Run `terraform plan` before applying.** GCP's three `*_workload_identity` bindings gained a `for_each` over `service_names`. If you already applied them, move each one, for example `terraform state mv 'google_service_account_iam_member.runtime_workload_identity' 'google_service_account_iam_member.runtime_workload_identity["<service>"]'`, then apply to change the member. AWS trust policies update in place. The old bindings pointed at `ml-services`, which no overlay uses. |
+| **`var.environment` is validated to `dev`, `staging` or `production`** | If you passed `prod`, pass `production`. The overlays' namespace suffix `prod` is derived from it. |
+| **`service_names` defaults to your service instead of `fraud-detector`** | If you relied on the default creating `fraud-detector` identities and secrets, set `service_names` explicitly. |
+| **Deploy images are built with `--build-arg CLOUD_PROVIDER=gcp\|aws`** | None if you use the shipped `deploy-*.yml`. If you build images yourself for staging or production, pass it. Without the SDK, every authenticated request returns 503. |
+| **Cloud secret ids are `<SECRETS_PREFIX>-<key>` (GCP) or `<SECRETS_PREFIX>/<key>` (AWS), key lowercased** | Store `API_KEY` under the Terraform-created `…-api_key` / `…/api_key`. If your code calls `get_secret()` for other keys in staging or production, name those secrets lowercase with the same prefix. |
+| **The drift CronJob runs as `<service>-drift-sa`** | None with the shipped overlays. If you patch the CronJob, keep the ServiceAccount, because the drift identity is bound to it and not to the predictor's. |
+| **The runtime Role lost `secrets: get`** | If your own code reads Kubernetes Secrets through the API, add a narrowly scoped rule back in your overlay. |
+| **New `networkpolicy-smoke-test.yaml` in `k8s/base`** | None. It admits only pods labelled `app.kubernetes.io/component: deploy-smoke-test`, which only the deploy smoke step sets. |
+
+---
+
 ## v0.27.0 → v0.28.0 (2026-09-12)
 
 | Change | Manual action required |

@@ -18,6 +18,12 @@ variable "environment" {
   description = "Environment name (staging, production)"
   type        = string
   default     = "production"
+  validation {
+    # The overlays and the Workload Identity / IRSA bindings derive the
+    # Kubernetes namespace from this value; anything else binds to nothing.
+    condition     = contains(["dev", "staging", "production"], var.environment)
+    error_message = "environment must be one of: dev, staging, production."
+  }
 }
 
 variable "machine_type" {
@@ -214,7 +220,7 @@ variable "service_names" {
     service deployed to this cluster. Mirrors AWS variable.service_names.
   EOT
   type        = list(string)
-  default     = ["fraud-detector"]
+  default     = ["{@ service_kebab @}"]
 }
 
 variable "secret_names" {

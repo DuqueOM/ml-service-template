@@ -245,7 +245,7 @@ resource "aws_iam_role_policy_attachment" "deploy" {
 # ---------------------------------------------------------------------------
 # 3. Drift IRSA role — drift CronJob (read CloudWatch, write S3 reports)
 # ---------------------------------------------------------------------------
-# Bound to the canonical drift KSA: ml-services/{@ service_slug @}-drift-sa
+# Bound to the drift KSA the overlays create: <service>-<env>/<service>-drift-sa
 # A separate role (vs the per-service IRSA in iam.tf) means a compromised
 # drift CronJob cannot read predictions or write models — only its own
 # reports bucket.
@@ -263,7 +263,7 @@ resource "aws_iam_role" "drift" {
       Condition = {
         StringEquals = {
           "${local.oidc_issuer_host}:aud" = "sts.amazonaws.com"
-          "${local.oidc_issuer_host}:sub" = "system:serviceaccount:${local.service_namespace}:${each.value}-drift-sa"
+          "${local.oidc_issuer_host}:sub" = "system:serviceaccount:${each.value}-${local.k8s_env_suffix}:${each.value}-drift-sa"
         }
       }
     }]
@@ -306,6 +306,9 @@ resource "aws_iam_policy" "drift" {
         Resource = [
           aws_s3_bucket.data.arn,
           "${aws_s3_bucket.data.arn}/${each.value}/reference/*",
+          # The drift CronJob's production-fetch step reads this object;
+          # without it the job fails AccessDenied before computing PSI.
+          "${aws_s3_bucket.data.arn}/${each.value}/latest.csv",
         ]
       },
       {
@@ -351,7 +354,7 @@ resource "aws_iam_role" "retrain" {
       Condition = {
         StringEquals = {
           "${local.oidc_issuer_host}:aud" = "sts.amazonaws.com"
-          "${local.oidc_issuer_host}:sub" = "system:serviceaccount:${local.service_namespace}:${each.value}-retrain-sa"
+          "${local.oidc_issuer_host}:sub" = "system:serviceaccount:${each.value}-${local.k8s_env_suffix}:${each.value}-retrain-sa"
         }
       }
     }]

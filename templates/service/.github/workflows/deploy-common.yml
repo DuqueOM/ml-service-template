@@ -261,25 +261,64 @@ jobs:
           done
 
       # -------------------------------------------------------------------
-      # Smoke test — audit Medium-5: namespace-aware + FQDN.
-      # Pod runs in the SERVICE's namespace so the short DNS name resolves.
-      # FQDN form keeps the test resilient if cluster's DNS search domains
-      # are non-default.
+      # Smoke test — readiness AND the auth path (ADR-051).
+      #
+      # `/ready` alone went green on a deployment whose every authenticated
+      # request failed: readiness never touches the secret backend. The
+      # second probe calls an auth-protected endpoint with a credential
+      # that is deliberately wrong, which forces the pod to resolve API_KEY
+      # from the cloud secret manager and compare:
+      #   auth enabled  -> 401  secret resolved, comparison ran    (pass)
+      #                    503  secret not resolvable              (fail)
+      #   auth disabled -> 200  endpoint reachable                 (pass)
+      # CI never holds the real key; the deploy identity needs no secret
+      # access for this (D-31).
+      #
+      # The pod must be admissible where it runs: digest-pinned for
+      # Kyverno's require-image-digest in staging/production, PSS
+      # `restricted` securityContext for prod namespaces, and the label
+      # k8s/base/networkpolicy-smoke-test.yaml admits past default-deny.
       # -------------------------------------------------------------------
       - name: Post-deploy smoke test
         env:
           NAMESPACE: ${{ steps.ns.outputs.namespace }}
+          SMOKE_IMAGE: "curlimages/curl:8.10.1@sha256:d9b4541e214bcd85196d6e92e2753ac6d0ea699f0af5741f8c6cccbfcf00ef4b"
         run: |
           for svc in $(echo '${{ inputs.services }}' | jq -r '.[]'); do
             LOWER=$(echo "$svc" | tr 'A-Z' 'a-z' | tr '_' '-')
             FQDN="${LOWER}-service.${NAMESPACE}.svc.cluster.local"
-            POD="smoke-${LOWER}-${GITHUB_RUN_ID}"
-            echo "→ Smoke test: GET http://${FQDN}/ready"
-            kubectl run "${POD}" -n "${NAMESPACE}" \
-              --rm -i --restart=Never \
-              --image=curlimages/curl:8.10.1 \
-              -- curl -sf --max-time 30 "http://${FQDN}/ready" \
-              || { echo "::error::Smoke test failed for ${svc} in namespace ${NAMESPACE}"; exit 1; }
+            POD="smoke-${LOWER}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            # Generated per run, never a stored literal: it must only be WRONG.
+            PROBE_KEY="invalid-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            AUTH_ENABLED=$(kubectl get deployment "${LOWER}-predictor" -n "${NAMESPACE}" \
+              -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="API_AUTH_ENABLED")].value}')
+            OVERRIDES=$(jq -nc --arg name "${POD}" '{spec: {
+              securityContext: {runAsNonRoot: true, runAsUser: 65532, seccompProfile: {type: "RuntimeDefault"}},
+              containers: [{name: $name, securityContext: {allowPrivilegeEscalation: false,
+                readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}}]}}')
+            echo "→ Smoke test: ${FQDN} (API_AUTH_ENABLED=${AUTH_ENABLED:-unset})"
+            OUT=$(kubectl run "${POD}" -n "${NAMESPACE}" \
+              --rm -i --quiet --restart=Never \
+              --image="${SMOKE_IMAGE}" \
+              --labels="app.kubernetes.io/component=deploy-smoke-test" \
+              --override-type=strategic --overrides="${OVERRIDES}" \
+              --command -- sh -ec "
+                curl -sf --max-time 30 http://${FQDN}/ready >/dev/null
+                echo SMOKE_READY=ok
+                echo SMOKE_AUTH_PROBE=\$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
+                  -H 'X-API-Key: ${PROBE_KEY}' http://${FQDN}/model/info)
+              ") || { echo "${OUT}"; echo "::error::Smoke test pod failed for ${svc} in ${NAMESPACE} (readiness or admission)"; exit 1; }
+            echo "${OUT}"
+            CODE=$(echo "${OUT}" | sed -n 's/^SMOKE_AUTH_PROBE=//p' | tail -1)
+            if [ "${AUTH_ENABLED}" = "true" ]; then
+              case "${CODE}" in
+                401) echo "✓ auth path verified: API_KEY resolved from the secret manager and a wrong key was rejected" ;;
+                503) echo "::error::${svc}: API_KEY is not resolvable in ${NAMESPACE}. Check SECRETS_PREFIX, that the secret has an enabled version, and the pod's workload identity (ADR-051)."; exit 1 ;;
+                *)   echo "::error::${svc}: auth probe expected 401, got '${CODE}'"; exit 1 ;;
+              esac
+            elif [ "${CODE}" != "200" ]; then
+              echo "::error::${svc}: /model/info expected 200 with auth disabled, got '${CODE}'"; exit 1
+            fi
           done
 
       # ---------------------------------------------------------------------

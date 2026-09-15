@@ -90,11 +90,14 @@ CO_INSTALLATION_GROUPS: dict[str, tuple[str, tuple[str, ...]]] = {
         "docs/TUTORIAL.md §3 installs eda/requirements.txt into the environment "
         "created from requirements.txt, then §4 runs `make train` in it; "
         "requirements-train.txt, requirements-dev.txt and eda/requirements-heavy.txt "
-        "each open with `-r requirements.txt`",
+        "each open with `-r requirements.txt`; the Dockerfile installs requirements-gcp.txt "
+        "or requirements-aws.txt on top of requirements.txt in the same venv (ADR-051)",
         (
             "templates/service/requirements.txt",
             "templates/service/requirements-train.txt",
             "templates/service/requirements-dev.txt",
+            "templates/service/requirements-gcp.txt",
+            "templates/service/requirements-aws.txt",
             "templates/service/eda/requirements.txt",
             "templates/service/eda/requirements-heavy.txt",
         ),

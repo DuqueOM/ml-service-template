@@ -13,6 +13,12 @@ variable "environment" {
   description = "Environment name (staging, production)"
   type        = string
   default     = "production"
+  validation {
+    # The overlays and the Workload Identity / IRSA bindings derive the
+    # Kubernetes namespace from this value; anything else binds to nothing.
+    condition     = contains(["dev", "staging", "production"], var.environment)
+    error_message = "environment must be one of: dev, staging, production."
+  }
 }
 
 variable "k8s_version" {
@@ -148,7 +154,7 @@ variable "service_names" {
     policy (read on data bucket, write on its own model prefix).
   EOT
   type        = list(string)
-  default     = ["fraud-detector"]
+  default     = ["{@ service_kebab @}"]
 }
 
 # ----------------------------------------------------------------------
