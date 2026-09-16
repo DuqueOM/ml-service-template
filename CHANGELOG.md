@@ -63,6 +63,38 @@ Four layers each chose a name, and no two chose the same one. See
   hint instead of running. It now runs `eda/eda_pipeline.py` with its required
   `--input` and `--target`, exposed as `DATA_PATH` and `EDA_TARGET`.
 
+### Fixed — CI identities read from the wrong scope, or trusted for a subject no job presents
+
+- **No AWS deploy job could assume its role.** Terraform's GitHub OIDC trust
+  allowed `repo:<owner>/<repo>:environment:<environment>`. A job that declares
+  `environment: aws-production` presents `environment:aws-production`. The
+  trust is now `environment:aws-<environment>`, asserted against
+  `deploy-common.yml`'s environment naming by the runtime identity contract.
+- **The nightly Terraform plan, drift detection and retrain read an
+  environment-scoped deploy role from jobs with no environment.** For them
+  `AWS_ROLE_ARN` is an empty string, and the deploy role is the wrong identity
+  anyway. They now read purpose-named, repository-scoped identities:
+  `AWS_CI_ROLE_ARN` and `GCP_CI_SERVICE_ACCOUNT` for the plan,
+  `AWS_DRIFT_ROLE_ARN` and `GCP_DRIFT_SERVICE_ACCOUNT` for drift, and
+  `AWS_RETRAIN_ROLE_ARN` and `GCP_RETRAIN_SERVICE_ACCOUNT` for retrain.
+  Terraform trust and permissions for the drift and retrain identities are
+  tracked in #183.
+- **The nightly plan read GCP's federation values from `secrets`** as
+  `GCP_WIF_PROVIDER` and `GCP_SA_EMAIL`, while every other workflow reads them
+  from `vars`. It now uses `vars`.
+- **`environment-promotion.md` placed `GCP_PROJECT_ID` and the cluster names at
+  environment scope.** The top-level `env`, the build job and the caller jobs
+  that read them declare no environment. That document now carries one table of every value with its
+  channel, scope and reader, and the runbooks' tables carry a Scope column.
+
+### Changed
+
+- `scripts/check_deploy_contract_documented.py` (gate 19) scans every payload
+  workflow instead of `deploy-*.yml`. It also fails when a value documented as
+  environment-scoped is read by a job that declares no environment, or calls no
+  reusable workflow that does. On the pre-fix tree it reports the nightly plan,
+  drift and retrain jobs.
+
 ### Added
 
 - `tests/test_runtime_identity_contract.py`. It evaluates Terraform

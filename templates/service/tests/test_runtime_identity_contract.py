@@ -369,3 +369,36 @@ def test_cloud_image_carries_its_secret_backend(cloud: str) -> None:
     assert re.search(rf"^{re.escape(distribution)}\s*~=", requirements, re.M), (
         f"requirements-{cloud}.txt does not pin {distribution}"
     )
+
+
+# ---------------------------------------------------------------------------
+# 5. GitHub OIDC subject for environment-scoped deploy jobs
+# ---------------------------------------------------------------------------
+def test_aws_github_oidc_trusts_the_environments_deploy_jobs_run_in() -> None:
+    """A job with ``environment:`` presents that environment's NAME as its OIDC subject.
+
+    ``deploy-common.yml`` names it ``<cloud>-<environment>``; Terraform trusted
+    ``environment:<environment>``, which no job presents, so no deploy job could
+    assume the CI or deploy role.
+    """
+    common = (WORKFLOWS / "deploy-common.yml").read_text(encoding="utf-8")
+    assert re.search(
+        r"^    environment:\s*\$\{\{\s*inputs\.cloud\s*\}\}-\$\{\{\s*inputs\.environment\s*\}\}\s*$", common, re.M
+    ), "deploy-common.yml no longer names its job environment <cloud>-<environment>; update this contract"
+    callers = (WORKFLOWS / "deploy-aws.yml").read_text(encoding="utf-8")
+    clouds = set(re.findall(r"^      cloud:\s*(\w+)\s*$", callers, re.M))
+    environments = sorted(set(re.findall(r"^      environment:\s*(\w+)\s*$", callers, re.M)))
+    assert clouds == {"aws"} and environments, "deploy-aws.yml passes no cloud/environment inputs"
+
+    text = _tf_text("aws")
+    block = re.search(r"github_oidc_subs\s*=.*?\[(.*?)\]", text, re.S)
+    assert block, "local.github_oidc_subs not found"
+    subjects = re.findall(r'"([^"]+)"', block.group(1))
+    for environment in environments:
+        rendered = {
+            s.replace("${var.github_repo}", "OWNER/REPO").replace("${var.environment}", environment) for s in subjects
+        }
+        expected = f"repo:OWNER/REPO:environment:aws-{environment}"
+        assert expected in rendered, (
+            f"no Terraform OIDC subject matches the {environment} deploy job ({expected}): {sorted(rendered)}"
+        )

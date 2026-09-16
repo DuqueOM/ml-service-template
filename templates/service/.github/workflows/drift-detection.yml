@@ -10,12 +10,15 @@ on:
         required: true
         default: "all"
 
-# Required GitHub Variables (no static cloud creds — D-18):
-#   GCP_WIF_PROVIDER     — Workload Identity Federation provider for GCS access
-#   GCP_SERVICE_ACCOUNT  — SA email with `roles/storage.objectViewer` on the
-#                          reference data bucket
-#   AWS_ROLE_ARN         — IAM role ARN with s3:GetObject on the data bucket
-#                          (set ONLY if DATA_BUCKET_KIND=s3)
+# Required configuration, all REPOSITORY-scoped (this job declares no
+# `environment:`), no static cloud creds — D-18:
+#   GCP_WIF_PROVIDER           (variable) Workload Identity Federation provider
+#   GCP_DRIFT_SERVICE_ACCOUNT  (variable) SA email with `roles/storage.objectViewer`
+#                              on the reference data bucket
+#   AWS_DRIFT_ROLE_ARN         (secret)   IAM role with s3:GetObject on the data
+#                              bucket (set ONLY if DATA_BUCKET_KIND=s3)
+# A purpose-named identity, not the deploy role: the deploy role is
+# environment-scoped and would arrive empty here (ADR-017 / D-31).
 #   DATA_BUCKET_KIND     — "gcs" | "s3" — picks the cloud-fetch branch below
 #   DATA_BUCKET          — bucket name (no protocol)
 #   PUSHGATEWAY_URL      — Prometheus Pushgateway URL
@@ -60,13 +63,13 @@ jobs:
         uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
         with:
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
-          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          service_account: ${{ vars.GCP_DRIFT_SERVICE_ACCOUNT }}
 
       - name: Authenticate to AWS (OIDC)
         if: vars.DATA_BUCKET_KIND == 's3'
         uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_DRIFT_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Download production data

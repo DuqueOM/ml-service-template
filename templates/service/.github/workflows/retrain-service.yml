@@ -11,11 +11,14 @@ on:
         required: false
         default: "50"
 
-# Required GitHub Variables (no static cloud creds — D-18):
-#   GCP_WIF_PROVIDER     — Workload Identity Federation provider resource path
-#   GCP_SERVICE_ACCOUNT  — SA email used by GCS reads/writes
-#   MLFLOW_TRACKING_URI  — MLflow server URL
-#   MODEL_BUCKET         — GCS bucket for model artifacts
+# Required configuration, all REPOSITORY-scoped (this job declares no
+# `environment:`), no static cloud creds — D-18:
+#   GCP_WIF_PROVIDER             (variable) Workload Identity Federation provider
+#   GCP_RETRAIN_SERVICE_ACCOUNT  (variable) SA email: read data, write models
+#   AWS_RETRAIN_ROLE_ARN         (secret)   IAM role: read data, write models (s3)
+#   MLFLOW_TRACKING_URI          (secret)   tracking server URL; may embed credentials
+#   DATA_BUCKET, DATA_BUCKET_KIND, MODEL_BUCKET, MODEL_BUCKET_KIND  (variables)
+# A purpose-named identity, not the deploy role (ADR-017 / D-31).
 
 env:
   SERVICE: "{@ service_name @}"
@@ -48,13 +51,13 @@ jobs:
         uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
         with:
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
-          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          service_account: ${{ vars.GCP_RETRAIN_SERVICE_ACCOUNT }}
 
       - name: Authenticate to AWS (OIDC)
         if: vars.MODEL_BUCKET_KIND == 's3'
         uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_RETRAIN_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Download fresh training data

@@ -49,7 +49,11 @@ locals {
     "repo:${var.github_repo}:ref:refs/heads/main",
     "repo:${var.github_repo}:ref:refs/heads/release/*",
     "repo:${var.github_repo}:ref:refs/tags/*",
-    "repo:${var.github_repo}:environment:${var.environment}",
+    # A job that declares `environment:` presents the ENVIRONMENT name as its
+    # subject instead of its ref, and deploy-common.yml names environments
+    # `aws-<environment>`. The bare `${var.environment}` matched no job, so no
+    # deploy job could assume these roles (ADR-051 naming contract).
+    "repo:${var.github_repo}:environment:aws-${var.environment}",
   ] : []
 
   service_ecr_repository_arns = [

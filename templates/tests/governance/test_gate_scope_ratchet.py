@@ -78,7 +78,7 @@ SCOPE: dict[str, tuple[str, int, str]] = {
     "check_dependency_pin_coherence": (r"OK — (\d+) requirements file", 6, "requirements files grouped"),
     "check_dependency_partition": (r"OK — (\d+) runtime module", 16, "runtime modules walked"),
     "check_config_is_read": (r"OK — (\d+) declared field", 51, "config fields checked"),
-    "check_deploy_contract_documented": (r"OK — (\d+) name\(s\)", 15, "deploy names checked"),
+    "check_deploy_contract_documented": (r"OK — (\d+) name\(s\)", 28, "workflow names checked"),
 }
 
 # Gates whose success line carries no scope number, with the reason. Their exit
