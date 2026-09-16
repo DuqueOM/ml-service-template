@@ -683,7 +683,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ---------------------------------------------------------------------
-  # A red L3 must reach a human.
+  # A red L3 must reach a human, and a green L3 must take the claim back.
   #
   # This workflow runs on a weekly schedule and on demand — never on a PR —
   # so its failures appear in no PR's checks and block nothing. It was red
@@ -740,4 +740,54 @@ jobs:
                 body,
               });
               core.notice(`Opened issue #${created.data.number}`);
+            }
+
+  # ---------------------------------------------------------------------
+  # A signal that only ever fires one way stops meaning anything.
+  #
+  # `notify-on-failure` opened issue #177 on 2026-09-12 and nothing ever
+  # closed it: the lane went green on the next two runs while the issue kept
+  # telling every reader that L3 was failing. An alert that cannot be
+  # retracted is indistinguishable from a stale one, so the lane now closes
+  # its own issue with the run that proves the claim no longer holds.
+  # ---------------------------------------------------------------------
+  close-on-green:
+    name: Close the Golden Path E2E (**L3**) issue when the lane is green
+    needs: [scaffold, build-and-sign, admit-and-smoke, audit-trail]
+    if: always() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const label = 'golden-path-red';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const open = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: label, per_page: 20,
+            });
+            if (!open.data.length) {
+              core.notice('Lane green and no open ' + label + ' issue — nothing to close.');
+              return;
+            }
+            for (const issue of open.data) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issue.number,
+                body: [
+                  `Golden Path E2E (**L3**) is green on \`${context.sha.slice(0, 7)}\`.`,
+                  ``,
+                  `Run: ${runUrl}`,
+                  ``,
+                  `Closed by the lane itself: a red-only signal is a stale signal.`,
+                ].join('\n'),
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issue.number, state: 'closed', state_reason: 'completed',
+              });
+              core.notice(`Closed issue #${issue.number}`);
             }

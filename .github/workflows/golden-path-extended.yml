@@ -393,3 +393,108 @@ jobs:
             echo "Stage 2 (alert firing via Prometheus + Pushgateway) is"
             echo "tracked as PR-R2-9b in ADR-016."
           } >> "${GITHUB_STEP_SUMMARY}"
+
+  # ---------------------------------------------------------------------
+  # A red closed-loop lane must reach a human.
+  #
+  # This lane proves the closed loop — /predict, the prediction log, the
+  # /metrics counter (D-21, D-22). It runs weekly and on demand, never on a
+  # PR, so its failures appear in no PR's checks. It had never once been
+  # green before v0.28.0 and nothing said so: `golden-path.yml` opens an
+  # issue when L3 is red, and this lane had no equivalent at all.
+  #
+  # Its own label, not `golden-path-red`: the two lanes fail for different
+  # reasons, and one thread that mixes them tells a reader neither.
+  # ---------------------------------------------------------------------
+  notify-on-failure:
+    name: Open an issue when the closed-loop lane is red
+    needs: [closed-loop-verification]
+    if: always() && contains(needs.*.result, 'failure')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const label = 'golden-path-extended-red';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              `Golden Path closed-loop E2E (**L3**) failed.`,
+              ``,
+              `Run: ${runUrl}`,
+              ``,
+              `This lane is the only automated proof that a scaffolded service`,
+              `logs the predictions it serves and exposes the counter. While it`,
+              `is red, D-21 and D-22 are claims with no evidence behind them.`,
+            ].join('\n');
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: label, per_page: 1,
+            });
+            if (existing.data.length) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: existing.data[0].number, body,
+              });
+              core.notice(`Commented on existing issue #${existing.data[0].number}`);
+            } else {
+              const created = await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title: 'Golden Path closed-loop E2E (L3) is failing',
+                labels: [label, 'ci'],
+                body,
+              });
+              core.notice(`Opened issue #${created.data.number}`);
+            }
+
+  # ---------------------------------------------------------------------
+  # A signal that only ever fires one way stops meaning anything.
+  #
+  # `notify-on-failure` opened issue #177 on 2026-09-12 and nothing ever
+  # closed it: the lane went green on the next two runs while the issue kept
+  # telling every reader that L3 was failing. An alert that cannot be
+  # retracted is indistinguishable from a stale one, so the lane now closes
+  # its own issue with the run that proves the claim no longer holds.
+  # ---------------------------------------------------------------------
+  close-on-green:
+    name: Close the Golden Path closed-loop E2E (**L3**) issue when the lane is green
+    needs: [closed-loop-verification]
+    if: always() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const label = 'golden-path-extended-red';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const open = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: label, per_page: 20,
+            });
+            if (!open.data.length) {
+              core.notice('Lane green and no open ' + label + ' issue — nothing to close.');
+              return;
+            }
+            for (const issue of open.data) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issue.number,
+                body: [
+                  `Golden Path closed-loop E2E (**L3**) is green on \`${context.sha.slice(0, 7)}\`.`,
+                  ``,
+                  `Run: ${runUrl}`,
+                  ``,
+                  `Closed by the lane itself: a red-only signal is a stale signal.`,
+                ].join('\n'),
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issue.number, state: 'closed', state_reason: 'completed',
+              });
+              core.notice(`Closed issue #${issue.number}`);
+            }

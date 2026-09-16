@@ -87,6 +87,24 @@ Four layers each chose a name, and no two chose the same one. See
   that read them declare no environment. That document now carries one table of every value with its
   channel, scope and reader, and the runbooks' tables carry a Scope column.
 
+### Fixed — the L3 alarms fired one way only
+
+- **The red-L3 issue was never closed.** `golden-path.yml` opened issue #177 on
+  2026-09-12 and nothing retracted it. The lane went green on the next two runs
+  while the issue kept telling every reader that L3 was failing. The lane now
+  closes its own issue, with the run that proves the claim no longer holds.
+- **The closed-loop lane notified nobody at all.** `golden-path-extended.yml`
+  is the only automated proof that a scaffolded service logs the predictions it
+  serves (D-21, D-22). It had never once been green before v0.28.0, and it runs
+  weekly and on demand, never on a PR, so a failure appeared in no checks. It
+  now opens and closes an issue under its own `golden-path-extended-red` label,
+  kept separate so one thread does not mix two lanes' reasons for failing.
+- `templates/tests/governance/test_lane_signals_both_ways.py` asserts, for every
+  golden-path lane, that it can both raise and retract its alarm under one
+  label, with `issues: write` and the right `needs.*.result` guard per
+  direction. It reads the labels from the workflows, so a new lane is covered
+  without editing the test.
+
 ### Changed
 
 - `scripts/check_deploy_contract_documented.py` (gate 19) scans every payload
