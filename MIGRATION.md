@@ -30,6 +30,9 @@ contract that prevents future versions from breaking adopters silently.
 | **The drift CronJob runs as `<service>-drift-sa`** | None with the shipped overlays. If you patch the CronJob, keep the ServiceAccount, because the drift identity is bound to it and not to the predictor's. |
 | **The runtime Role lost `secrets: get`** | If your own code reads Kubernetes Secrets through the API, add a narrowly scoped rule back in your overlay. |
 | **New `networkpolicy-smoke-test.yaml` in `k8s/base`** | None. It admits only pods labelled `app.kubernetes.io/component: deploy-smoke-test`, which only the deploy smoke step sets. |
+| **AWS GitHub OIDC trust names the GitHub environment, `environment:aws-<environment>`** | **`terraform apply` before your first AWS deploy.** The previous subject `environment:<environment>` matched no job, so deploy jobs could not assume the role. If you created the deploy role by hand, add the `aws-` prefix to its environment subject. |
+| **Scheduled workflows use their own identities** | **Add repository-scoped values:** `AWS_CI_ROLE_ARN` (secret) and `GCP_CI_SERVICE_ACCOUNT` (variable) for `terraform-plan-nightly.yml`; `AWS_DRIFT_ROLE_ARN` / `GCP_DRIFT_SERVICE_ACCOUNT` for `drift-detection.yml`; `AWS_RETRAIN_ROLE_ARN` / `GCP_RETRAIN_SERVICE_ACCOUNT` for `retrain-service.yml`. They previously read `AWS_ROLE_ARN` and `GCP_SERVICE_ACCOUNT`; the AWS one is environment-scoped and reached them empty. Delete the nightly plan's old `GCP_WIF_PROVIDER` and `GCP_SA_EMAIL` secrets; `GCP_WIF_PROVIDER` is read from variables. |
+| **`GCP_PROJECT_ID` and the `GKE_*` / `EKS_*` cluster names are repository variables** | If you created them per environment following the old `environment-promotion.md`, move them to repository level. The jobs reading them declare no environment. |
 
 ---
 

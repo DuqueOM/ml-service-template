@@ -83,10 +83,12 @@ def test_the_current_tree_passes(tmp_path: Path) -> None:
 def test_an_undocumented_secret_is_rejected(tmp_path: Path) -> None:
     """AWS_BUILD_ROLE_ARN's original state: required, and named nowhere."""
     root = _sandbox(tmp_path)
-    runbook = root / RUNBOOK
-    text = runbook.read_text(encoding="utf-8")
-    assert "AWS_BUILD_ROLE_ARN" in text, "the runbook no longer documents it; this control is stale"
-    runbook.write_text(text.replace("AWS_BUILD_ROLE_ARN", "AWS_SOMETHING_ELSE"), encoding="utf-8")
+    documented = [md for md in root.rglob("*.md") if "AWS_BUILD_ROLE_ARN" in md.read_text(encoding="utf-8")]
+    assert documented, "no document names AWS_BUILD_ROLE_ARN any more; this control is stale"
+    for md in documented:
+        md.write_text(
+            md.read_text(encoding="utf-8").replace("AWS_BUILD_ROLE_ARN", "AWS_SOMETHING_ELSE"), encoding="utf-8"
+        )
 
     code, out = _run(root)
     assert code == 1, f"a secret documented nowhere was accepted:\n{out}"
@@ -109,11 +111,8 @@ def test_the_wrong_channel_is_rejected(tmp_path: Path) -> None:
     row = [ln for ln in text.splitlines() if ln.startswith("| `AWS_ROLE_ARN`")]
     assert row, "AWS_ROLE_ARN is no longer a table row in the runbook; this control is stale"
     text = text.replace(row[0] + "\n", "", 1)
-    text = text.replace(
-        "| `AWS_REGION` | e.g. `us-east-1` |",
-        "| `AWS_ROLE_ARN` | the CI role |\n| `AWS_REGION` | e.g. `us-east-1` |",
-        1,
-    )
+    region_row = next(ln for ln in text.splitlines() if ln.startswith("| `AWS_REGION`"))
+    text = text.replace(region_row, "| `AWS_ROLE_ARN` | repository | the CI role |\n" + region_row, 1)
     runbook.write_text(text, encoding="utf-8")
 
     code, out = _run(root)
@@ -152,12 +151,67 @@ def test_prose_mentions_do_not_declare_a_channel(tmp_path: Path) -> None:
 def test_the_gate_refuses_to_pass_on_an_empty_scan(tmp_path: Path) -> None:
     """A gate that finds no workflows must fail, not report success."""
     root = _sandbox(tmp_path)
-    for workflow in (root / DEPLOY_DIR).glob("deploy-*.yml"):
+    for workflow in (root / DEPLOY_DIR).glob("*.yml"):
         workflow.unlink()
 
     code, out = _run(root)
     assert code == 1, f"the gate examined nothing and reported success:\n{out}"
     assert "no vars/secrets references found" in out
+
+
+def test_an_environment_scoped_role_read_outside_an_environment_is_rejected(tmp_path: Path) -> None:
+    """The pre-fix shape: the nightly plan read the per-environment deploy role.
+
+    ``plan-aws`` declares no ``environment:``, so GitHub hands it an empty
+    string for an environment secret. The deploy jobs read the same name
+    legitimately — through ``deploy-common.yml``, whose job declares the
+    environment — and must not be reported.
+    """
+    root = _sandbox(tmp_path)
+    nightly = root / DEPLOY_DIR / "terraform-plan-nightly.yml"
+    text = nightly.read_text(encoding="utf-8")
+    assert "secrets.AWS_CI_ROLE_ARN" in text, "the nightly plan no longer reads its CI role; this control is stale"
+    nightly.write_text(text.replace("secrets.AWS_CI_ROLE_ARN", "secrets.AWS_ROLE_ARN"), encoding="utf-8")
+
+    code, out = _run(root)
+    assert code == 1, f"an environment secret read outside any environment was accepted:\n{out}"
+    assert "`terraform-plan-nightly.yml` job `plan-aws`" in out
+    assert "deploy-aws.yml" not in out, f"a reusable-workflow caller was reported:\n{out}"
+
+
+def test_an_environment_scoped_variable_read_by_the_build_job_is_rejected(tmp_path: Path) -> None:
+    """environment-promotion.md's pre-fix claim: GCP_PROJECT_ID per environment."""
+    root = _sandbox(tmp_path)
+    guide = root / "docs" / "environment-promotion.md"
+    text = guide.read_text(encoding="utf-8")
+    row = next((ln for ln in text.splitlines() if ln.startswith("| `GCP_PROJECT_ID` | repository |")), None)
+    assert row, "GCP_PROJECT_ID is no longer a repository-scoped row; this control is stale"
+    guide.write_text(text.replace(row, row.replace("| repository |", "| environment |", 1)), encoding="utf-8")
+    runbook = root / "docs" / "runbooks" / "gcp-wif-setup.md"
+    runbook.write_text(
+        runbook.read_text(encoding="utf-8").replace(
+            "| `GCP_PROJECT_ID` | repository |", "| `GCP_PROJECT_ID` | environment |"
+        ),
+        encoding="utf-8",
+    )
+
+    code, out = _run(root)
+    assert code == 1, f"an environment variable read by a job outside any environment was accepted:\n{out}"
+    # Read in deploy-gcp.yml's top-level env:, which no environment can reach.
+    assert "GCP_PROJECT_ID" in out and "`deploy-gcp.yml` (workflow-level env)" in out
+
+
+def test_contradictory_scopes_are_rejected(tmp_path: Path) -> None:
+    root = _sandbox(tmp_path)
+    runbook = root / "docs" / "runbooks" / "gcp-wif-setup.md"
+    text = runbook.read_text(encoding="utf-8")
+    runbook.write_text(
+        text.replace("| `GCP_REGION` | repository |", "| `GCP_REGION` | environment |"), encoding="utf-8"
+    )
+
+    code, out = _run(root)
+    assert code == 1
+    assert "GCP_REGION is documented as both repository- and environment-scoped" in out
 
 
 def test_the_scope_is_reported_for_the_ratchet() -> None:
@@ -166,4 +220,4 @@ def test_the_scope_is_reported_for_the_ratchet() -> None:
     assert proc.returncode == 0, proc.stdout + proc.stderr
     match = re.search(r"OK — (\d+) name\(s\)", proc.stdout)
     assert match, f"no scope count in the success line:\n{proc.stdout}"
-    assert int(match.group(1)) >= 15, f"only {match.group(1)} names checked"
+    assert int(match.group(1)) >= 28, f"only {match.group(1)} names checked"

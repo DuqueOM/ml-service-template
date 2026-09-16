@@ -17,14 +17,17 @@
 #   - Bootstrap state. The TF backend MUST already exist (PR-A2 territory).
 #   - Cross-environment plan. Each env has its own state file.
 #
-# Required GitHub Actions secrets / variables (per environment):
+# Required GitHub Actions secrets / variables — all REPOSITORY-scoped. The plan
+# jobs declare no `environment:`, so an environment-scoped value is invisible to
+# them and arrives empty. They use Terraform's `ci` identity, never the
+# per-environment deploy role (ADR-017 / D-31).
 #   GCP:
-#     - secrets.GCP_WIF_PROVIDER          (workload-identity-federation)
-#     - secrets.GCP_SA_EMAIL              (read-only TF role)
+#     - vars.GCP_WIF_PROVIDER             (workload-identity-federation)
+#     - vars.GCP_CI_SERVICE_ACCOUNT       (Terraform output ci_service_account_email)
 #     - vars.GCP_PROJECT_ID
 #     - vars.GCP_REGION
 #   AWS:
-#     - secrets.AWS_ROLE_ARN              (read-only TF role via OIDC)
+#     - secrets.AWS_CI_ROLE_ARN           (Terraform output ci_role_arn, via OIDC)
 #     - vars.AWS_REGION
 #   OPTIONAL — cost breakdown (R4-L3):
 #     - secrets.INFRACOST_API_KEY         (from https://www.infracost.io/docs/)
@@ -98,8 +101,8 @@ jobs:
       - name: Authenticate to GCP via Workload Identity Federation
         uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
         with:
-          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
-          service_account: ${{ secrets.GCP_SA_EMAIL }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
 
       - name: Terraform init
         run: terraform init -backend=true -reconfigure
@@ -263,7 +266,7 @@ jobs:
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_CI_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Terraform init

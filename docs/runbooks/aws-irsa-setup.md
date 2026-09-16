@@ -173,21 +173,29 @@ listed at all.
 
 **Secrets** — `https://github.com/$GH_OWNER/$GH_REPO/settings/secrets/actions`
 
-| Secret | Value | Read by |
-| -------- | ------- | --------- |
-| `AWS_ROLE_ARN` | `arn:aws:iam::${ACCOUNT_ID}:role/${CI_ROLE_NAME}` | the **deploy** jobs, via `deploy-common.yml`'s `workflow_call` secrets contract |
-| `AWS_BUILD_ROLE_ARN` | `arn:aws:iam::${ACCOUNT_ID}:role/${BUILD_ROLE_NAME}` | the **build** job, to push to ECR |
+| Secret | Scope | Value | Read by |
+| -------- | ------- | ------- | --------- |
+| `AWS_ROLE_ARN` | environment: one per `aws-dev`, `aws-staging`, `aws-production` | `arn:aws:iam::${ACCOUNT_ID}:role/${CI_ROLE_NAME}` | the **deploy** jobs, via `deploy-common.yml`'s `workflow_call` secrets contract |
+| `AWS_BUILD_ROLE_ARN` | repository | `arn:aws:iam::${ACCOUNT_ID}:role/${BUILD_ROLE_NAME}` | the **build** job, to push to ECR |
 
 Two roles rather than one is deliberate — ADR-017 / D-31, per-purpose
 identities. The build role needs ECR push and nothing else; the deploy role
 needs EKS access and nothing else. Point them at the same role only if you
 accept that a compromised build step can also deploy.
 
-Use **environment** secrets rather than repository secrets if `dev`, `staging`
-and `prod` should assume different roles, which is the arrangement D-31 is
-asking for. That is also the reason these stay secrets rather than variables:
-environment scoping is the mechanism that makes per-environment roles work, and
-a non-sensitive value in a secret costs nothing.
+`AWS_ROLE_ARN` goes in each `aws-*` **environment**, one role per environment
+(ADR-011, D-31). `AWS_BUILD_ROLE_ARN` goes at **repository** level. The build
+job declares no `environment:`, so an environment secret would reach it as an
+empty string. Environment scoping is also why the role ARNs stay secrets rather
+than variables: it is what makes per-environment roles work, and a
+non-sensitive value in a secret costs nothing.
+
+A job that declares an environment presents
+`repo:<owner>/<repo>:environment:aws-<environment>` as its OIDC subject instead
+of its ref, so the deploy role must trust that subject; `infra/terraform/aws`
+does. The scheduled workflows (nightly plan, drift, retrain) run outside any
+environment and use their own repository-scoped identities. The full table of
+every value, its channel and its scope is in `docs/environment-promotion.md`.
 
 > **Known asymmetry.** The GCP side reads its equivalents from `vars`
 > (`vars.GCP_SERVICE_ACCOUNT`, `vars.GCP_WIF_PROVIDER`) and its runbook says so
@@ -199,13 +207,17 @@ a non-sensitive value in a secret costs nothing.
 
 **Variables** — `https://github.com/$GH_OWNER/$GH_REPO/settings/variables/actions`
 
-| Variable | Value |
-| ---------- | ------- |
-| `AWS_REGION` | e.g. `us-east-1` |
-| `AWS_REGISTRY_ID` | `${ACCOUNT_ID}` — the ECR registry account |
-| `EKS_DEV_CLUSTER` | EKS cluster name for dev |
-| `EKS_STAGING_CLUSTER` | EKS cluster name for staging |
-| `EKS_PROD_CLUSTER` | EKS cluster name for prod |
+| Variable | Scope | Value |
+| ---------- | ------- | ------- |
+| `AWS_REGION` | repository | e.g. `us-east-1` |
+| `AWS_REGISTRY_ID` | repository | `${ACCOUNT_ID}` — the ECR registry account |
+| `EKS_DEV_CLUSTER` | repository | EKS cluster name for dev |
+| `EKS_STAGING_CLUSTER` | repository | EKS cluster name for staging |
+| `EKS_PROD_CLUSTER` | repository | EKS cluster name for prod |
+
+The cluster names are repository-scoped even though each names one
+environment's cluster: the caller jobs in `deploy-aws.yml` that read them
+declare no environment.
 
 If the deploy chain still references `secrets.AWS_ACCESS_KEY_ID` or
 `secrets.AWS_SECRET_ACCESS_KEY` after this runbook, **delete those

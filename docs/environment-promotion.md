@@ -76,25 +76,56 @@ from GitHub OIDC tokens at workflow runtime.
 - One IAM role per env (`github-actions-ci-deployer-{dev,staging,prod}`)
   trusts the GitHub OIDC provider with a `sub:` condition restricting
   to this repo and (for prod) only main + version tags.
+- Terraform's trust policy allows the subject a job in that environment
+  presents, `repo:<owner>/<repo>:environment:aws-<environment>`.
 - The role ARN IS sensitive (it controls deploy access to that env)
   and lives in **Environment Secrets**:
   `Settings → Environments → {aws-dev,aws-staging,aws-production}` →
   add secret `AWS_ROLE_ARN`. Each env's role has the smallest IAM
   policy needed for its scope.
 
-### Environment vars (per env, in `Settings → Environments → <env>`)
+### Where each value goes
 
-- `GCP_PROJECT_ID` — the cloud project ID for this env (GCP only)
-- `GKE_DEV_CLUSTER` / `GKE_STAGING_CLUSTER` / `GKE_PROD_CLUSTER`
-- `EKS_DEV_CLUSTER` / `EKS_STAGING_CLUSTER` / `EKS_PROD_CLUSTER`
+GitHub exposes an **environment**-scoped secret or variable only to a job that
+declares that `environment:`. Every other job sees repository-scoped values
+only. That includes a deploy workflow's build job and the caller jobs that pass
+`cluster_name` to `deploy-common.yml`. For them an environment-scoped value
+arrives as an empty string. GitHub does not fall back between `secrets` and
+`vars` either. `scripts/check_deploy_contract_documented.py` fails CI when a
+workflow and the tables below disagree on a name, its channel or its scope.
 
-### Repository-level vars (shared, in `Settings → Variables`)
+The only environment-scoped value is the per-environment deploy role.
+Everything else is repository-scoped. The scheduled workflows use their own
+purpose-named identities, because they run outside any environment and must not
+reuse the deploy role (ADR-017, D-31).
 
-- `GCP_REGION`, `AWS_REGION`, `AWS_ACCOUNT_ID`
-- `GCP_WIF_PROVIDER`, `GCP_SERVICE_ACCOUNT` (federation targets)
-- `AWS_REGISTRY_ID` (ECR account ID)
-- `PROMETHEUS_URL` (used by the Dynamic Behavior Protocol pre-deploy
-  check — see ADR-010, ADR-014 §4.2)
+| Secret | Scope | Read by | Value |
+| --- | --- | --- | --- |
+| `AWS_ROLE_ARN` | environment: one per `aws-dev`, `aws-staging`, `aws-production` | `deploy-common.yml` deploy job | Terraform output `deploy_role_arn` for that environment |
+| `AWS_BUILD_ROLE_ARN` | repository | `deploy-aws.yml` build job, to push to ECR | Terraform output `ci_role_arn`, or a dedicated build role |
+| `AWS_CI_ROLE_ARN` | repository | `terraform-plan-nightly.yml` | Terraform output `ci_role_arn` |
+| `AWS_DRIFT_ROLE_ARN` | repository | `drift-detection.yml` when `DATA_BUCKET_KIND=s3` | a role with read on the data bucket, trusted for `ref:refs/heads/main` (tracked in #183) |
+| `AWS_RETRAIN_ROLE_ARN` | repository | `retrain-service.yml` when the buckets are `s3` | a role with read on data and write on models, trusted for `ref:refs/heads/main` (tracked in #183) |
+| `MLFLOW_TRACKING_URI` | repository | `retrain-service.yml` | tracking server URL; a secret because it may embed credentials |
+| `INFRACOST_API_KEY` | repository, optional | `terraform-plan-nightly.yml` | cost breakdown; the step is skipped when absent |
+| `CODECOV_TOKEN` | repository, optional | `ci.yml` | coverage upload |
+
+| Variable | Scope | Read by | Value |
+| --- | --- | --- | --- |
+| `GCP_WIF_PROVIDER` | repository | every workflow that authenticates to GCP | Workload Identity Federation provider resource path |
+| `GCP_SERVICE_ACCOUNT` | repository | `deploy-gcp.yml` build job, `deploy-common.yml` | Terraform output `deploy_service_account_email` |
+| `GCP_CI_SERVICE_ACCOUNT` | repository | `terraform-plan-nightly.yml` | Terraform output `ci_service_account_email` |
+| `GCP_DRIFT_SERVICE_ACCOUNT` | repository | `drift-detection.yml` when `DATA_BUCKET_KIND=gcs` | a service account with read on the data bucket that the WIF principal can impersonate (tracked in #183) |
+| `GCP_RETRAIN_SERVICE_ACCOUNT` | repository | `retrain-service.yml` when the buckets are `gcs` | a service account with read on data and write on models that the WIF principal can impersonate (tracked in #183) |
+| `GCP_PROJECT_ID` | repository | `deploy-gcp.yml` top-level `env` (registry URL), `terraform-plan-nightly.yml` | the project ID |
+| `GCP_REGION` | repository | GCP workflows | e.g. `us-central1` |
+| `GKE_DEV_CLUSTER`, `GKE_STAGING_CLUSTER`, `GKE_PROD_CLUSTER` | repository | `deploy-gcp.yml` caller jobs | GKE cluster names |
+| `AWS_REGION` | repository | AWS workflows | e.g. `us-east-1` |
+| `AWS_REGISTRY_ID` | repository | `deploy-aws.yml` build job | the ECR registry account |
+| `EKS_DEV_CLUSTER`, `EKS_STAGING_CLUSTER`, `EKS_PROD_CLUSTER` | repository | `deploy-aws.yml` caller jobs | EKS cluster names |
+| `PROMETHEUS_URL` | repository, optional | `deploy-common.yml` dynamic risk mode | degrades gracefully when absent (ADR-010, ADR-014 §4.2) |
+| `DATA_BUCKET`, `DATA_BUCKET_KIND` | repository | `drift-detection.yml`, `retrain-service.yml` | bucket name; `gcs` or `s3` |
+| `MODEL_BUCKET`, `MODEL_BUCKET_KIND` | repository | `retrain-service.yml` | bucket name; `gcs` or `s3` |
 
 ## Branch-based guards (defense in depth)
 
@@ -145,7 +176,7 @@ Services created with v1.7.0 or earlier have flat `production-gcp` /
 `production-aws` environments and tag-triggered deploys. Migration:
 
 1. Create the 6 new environments in repo Settings (dev/staging/prod × gcp/aws)
-2. Move secrets from repo-level to environment-scoped
+2. Move `AWS_ROLE_ARN` into each `aws-*` environment and keep every other value repository-scoped, per the tables above
 3. Adopt the new `deploy-*.yml` (diffable — minimal user edits)
 4. Add `k8s/overlays/*-dev` and `*-staging` overlays
 5. Delete the old flat environments AFTER the first successful pipeline

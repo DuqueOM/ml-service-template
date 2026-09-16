@@ -27,19 +27,33 @@ The GCP side was consistent — its runbook says variables and its workflow read
 
 What this checks
 ----------------
-For every ``vars.NAME`` and ``secrets.NAME`` referenced by a deploy workflow in
-the Copier payload:
+For every ``vars.NAME`` and ``secrets.NAME`` referenced by ANY workflow in the
+Copier payload:
 
 1. the name is documented somewhere an adopter reads (``docs/runbooks/``,
    ``docs/*.md``, or the payload's own docs), and
 2. the documentation puts it in the **same channel** the workflow reads it
    from — a name that appears under a "Secrets" heading but is read from
-   ``vars`` is as broken as one that is missing.
+   ``vars`` is as broken as one that is missing, and
+3. a name documented as **environment**-scoped is only read by jobs that
+   declare an ``environment:`` — or that call a reusable workflow whose jobs
+   do, which is how an environment secret legitimately reaches
+   ``deploy-common.yml``.
 
-Check 2 is **table-scoped and exact**, not a proximity heuristic. A markdown
-table whose first header cell is ``Secret`` or ``Variable`` declares the channel
-for every name in its first column; nothing else counts. Prose mentions are
-ignored entirely.
+Check 3 is the same silent failure one level up. GitHub exposes an environment
+secret or variable only to a job that declares that environment; everywhere
+else it is an empty string. Three were live when this check was added: the
+nightly Terraform plan, drift detection and retrain all read ``AWS_ROLE_ARN`` —
+documented, correctly, as per-environment — from jobs with no environment, and
+``environment-promotion.md`` placed ``GCP_PROJECT_ID`` and the cluster names at
+environment scope while the jobs reading them declare none. The scan used to
+cover only ``deploy-*.yml``, which is why none of it was visible.
+
+Checks 2 and 3 are **table-scoped and exact**, not proximity heuristics. A
+markdown table whose first header cell is ``Secret`` or ``Variable`` declares
+the channel for every name in its first column; a ``Scope`` column in that
+table declares ``environment`` or ``repository``. Nothing else counts. Prose
+mentions are ignored entirely.
 
 That precision was not the first attempt. Looking for the nearest preceding
 heading that said "secret" or "variable" produced **eleven false positives** on
@@ -53,13 +67,15 @@ than as prose.
 Exit codes
 ----------
 - 0: every referenced name is documented in the channel it is read from.
-- 1: a name is undocumented, or documented under the other channel.
+- 1: a name is undocumented, documented under the other channel, or documented
+  as environment-scoped and read by a job outside any environment.
 """
 
 from __future__ import annotations
 
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -72,9 +88,10 @@ DOC_GLOBS = (
     "templates/service/docs/**/*.md",
 )
 
-# Only the lanes that deploy. A CI workflow reading a token is not an adopter
-# setup step, and folding those in would make the gate loud enough to ignore.
-DEPLOY_WORKFLOWS = ("deploy-*.yml",)
+# Every workflow a generated service ships. Scoping this to deploy-*.yml is how
+# three scheduled workflows read an environment-scoped role from outside any
+# environment without this gate seeing them.
+WORKFLOW_GLOBS = ("*.yml", "*.yaml")
 
 _REF = re.compile(r"\b(?P<channel>vars|secrets)\.(?P<name>[A-Z][A-Z0-9_]{2,})\b")
 
@@ -89,18 +106,100 @@ _ROW = re.compile(r"^\s*\|(?P<cells>.+)\|\s*$")
 _SEPARATOR = re.compile(r"^\s*\|[\s:|-]+\|\s*$")
 _CHANNEL_HEADER = {"secret": "secrets", "secrets": "secrets", "variable": "vars", "variables": "vars"}
 
+_JOB = re.compile(r"^  (?P<job>[A-Za-z0-9_-]+):\s*$")
+_JOB_ENVIRONMENT = re.compile(r"^    environment:", re.M)
+_JOB_USES = re.compile(r"^    uses:\s*\./\.github/workflows/(?P<file>[^\s@]+)", re.M)
+
+
+@dataclass(frozen=True)
+class Read:
+    workflow: str
+    job: str
+    channel: str
+    name: str
+    in_environment: bool
+
+
+def _workflows() -> list[Path]:
+    return sorted({p for pattern in WORKFLOW_GLOBS for p in WORKFLOWS.glob(pattern)})
+
+
+WORKFLOW_LEVEL = "(workflow-level env)"
+
+
+def _workflow_level(text: str) -> str:
+    """Everything before ``jobs:``, comments removed — where a top-level ``env:`` lives.
+
+    A top-level ``env:`` is evaluated outside any job, so it can never see an
+    environment-scoped value. ``deploy-gcp.yml`` builds its registry URL from
+    ``vars.GCP_PROJECT_ID`` exactly there.
+    """
+    lines = text.splitlines()
+    end = next((i for i, line in enumerate(lines) if line.rstrip() == "jobs:"), len(lines))
+    return "\n".join(line for line in lines[:end] if not line.lstrip().startswith("#"))
+
+
+def _jobs(text: str) -> dict[str, str]:
+    """job id -> its body, comment lines removed. Text-based: payload YAML carries Jinja tokens."""
+    lines = text.splitlines()
+    try:
+        start = next(i for i, line in enumerate(lines) if line.rstrip() == "jobs:")
+    except StopIteration:
+        return {}
+    jobs: dict[str, list[str]] = {}
+    current: str | None = None
+    for line in lines[start + 1 :]:
+        if line and not line.startswith(" ") and not line.startswith("#"):
+            break
+        match = _JOB.match(line)
+        if match:
+            current = match.group("job")
+            jobs[current] = []
+        elif current is not None and not line.lstrip().startswith("#"):
+            jobs[current].append(line)
+    return {job: "\n".join(body) for job, body in jobs.items()}
+
+
+def _environment_workflows() -> set[str]:
+    """Workflow files whose every job declares an environment."""
+    result = set()
+    for path in _workflows():
+        jobs = _jobs(path.read_text(encoding="utf-8"))
+        if jobs and all(_JOB_ENVIRONMENT.search(body) for body in jobs.values()):
+            result.add(path.name)
+    return result
+
 
 def _referenced() -> dict[str, set[str]]:
-    """name -> {channels it is read from} across the deploy workflows."""
+    """name -> {channels it is read from} across every workflow, comments included."""
     found: dict[str, set[str]] = {}
-    for pattern in DEPLOY_WORKFLOWS:
-        for path in sorted(WORKFLOWS.glob(pattern)):
-            for match in _REF.finditer(path.read_text(encoding="utf-8")):
-                name = match.group("name")
-                if name in _PROVIDED:
-                    continue
-                found.setdefault(name, set()).add(match.group("channel"))
+    for path in _workflows():
+        for match in _REF.finditer(path.read_text(encoding="utf-8")):
+            name = match.group("name")
+            if name in _PROVIDED:
+                continue
+            found.setdefault(name, set()).add(match.group("channel"))
     return found
+
+
+def _job_reads() -> list[Read]:
+    """Every vars/secrets read inside a job, with whether that job runs in an environment."""
+    environment_workflows = _environment_workflows()
+    reads: list[Read] = []
+    for path in _workflows():
+        text = path.read_text(encoding="utf-8")
+        for match in _REF.finditer(_workflow_level(text)):
+            if match.group("name") not in _PROVIDED:
+                reads.append(Read(path.name, WORKFLOW_LEVEL, match.group("channel"), match.group("name"), False))
+        for job, body in _jobs(text).items():
+            uses = _JOB_USES.search(body)
+            in_environment = bool(_JOB_ENVIRONMENT.search(body)) or bool(
+                uses and Path(uses.group("file")).name in environment_workflows
+            )
+            for match in _REF.finditer(body):
+                if match.group("name") not in _PROVIDED:
+                    reads.append(Read(path.name, job, match.group("channel"), match.group("name"), in_environment))
+    return reads
 
 
 def _docs() -> list[tuple[Path, str]]:
@@ -112,14 +211,23 @@ def _docs() -> list[tuple[Path, str]]:
     return sorted(seen.items())
 
 
-def _declared_channels(text: str) -> dict[str, set[str]]:
-    """name -> channels, from tables whose first header cell names a channel.
+def _scope(cell: str) -> str | None:
+    text = cell.lower()
+    if "environment" in text and "repository" not in text:
+        return "environment"
+    if "repository" in text:
+        return "repository"
+    return None
 
-    Only the first column of such a table counts. A name mentioned in prose, in
-    a "Read by" column, or in a table with any other header is not a
-    declaration of where to put it.
+
+def _declarations(text: str) -> dict[str, set[tuple[str, str | None]]]:
+    """name -> {(channel, scope)}, from tables whose first header cell names a channel.
+
+    Only the first column of such a table counts, and scope only from a column
+    headed ``Scope``. A name mentioned in prose, in a "Read by" column, or in a
+    table with any other header is not a declaration of where to put it.
     """
-    declared: dict[str, set[str]] = {}
+    declared: dict[str, set[tuple[str, str | None]]] = {}
     lines = text.splitlines()
     index = 0
     while index < len(lines):
@@ -127,17 +235,19 @@ def _declared_channels(text: str) -> dict[str, set[str]]:
         if not header or index + 1 >= len(lines) or not _SEPARATOR.match(lines[index + 1]):
             index += 1
             continue
-        first_cell = header.group("cells").split("|")[0].strip().strip("*`").lower()
-        channel = _CHANNEL_HEADER.get(first_cell)
+        header_cells = [c.strip().strip("*`").lower() for c in header.group("cells").split("|")]
+        channel = _CHANNEL_HEADER.get(header_cells[0])
+        scope_column = header_cells.index("scope") if "scope" in header_cells else None
         index += 2
         while index < len(lines):
             row = _ROW.match(lines[index])
             if not row:
                 break
             if channel:
-                cell = row.group("cells").split("|")[0]
-                for name in re.findall(r"[A-Z][A-Z0-9_]{2,}", cell):
-                    declared.setdefault(name, set()).add(channel)
+                cells = row.group("cells").split("|")
+                scope = _scope(cells[scope_column]) if scope_column is not None and scope_column < len(cells) else None
+                for name in re.findall(r"[A-Z][A-Z0-9_]{2,}", cells[0]):
+                    declared.setdefault(name, set()).add((channel, scope))
             index += 1
     return declared
 
@@ -146,7 +256,7 @@ def main() -> int:
     referenced = _referenced()
     if not referenced:
         print(f"FAIL: no vars/secrets references found under {WORKFLOWS.relative_to(REPO_ROOT)}.")
-        print("  Either the deploy workflows moved or the pattern stopped matching —")
+        print("  Either the workflows moved or the pattern stopped matching —")
         print("  and a gate that checks nothing reports success, which is the defect")
         print("  this one exists to prevent.")
         return 1
@@ -158,23 +268,37 @@ def main() -> int:
 
     undocumented: list[str] = []
     mismatched: list[tuple[str, str, str, str]] = []
+    scopes: dict[str, set[str]] = {}
 
     for name, channels in sorted(referenced.items()):
         mentions = [(path, text) for path, text in docs if re.search(rf"\b{re.escape(name)}\b", text)]
         if not mentions:
             undocumented.append(name)
             continue
+        for path, text in mentions:
+            for _, scope in _declarations(text).get(name, set()):
+                if scope:
+                    scopes.setdefault(name, set()).add(scope)
         if len(channels) != 1:
             continue  # read from both channels somewhere; not this gate's call
         (read_from,) = channels
         for path, text in mentions:
-            documented = _declared_channels(text).get(name)
+            documented = {channel for channel, _ in _declarations(text).get(name, set())}
             if documented and read_from not in documented:
                 mismatched.append((name, read_from, sorted(documented)[0], path.relative_to(REPO_ROOT).as_posix()))
                 break
 
-    if undocumented or mismatched:
-        print("FAIL: the deploy contract does not match what an adopter is told to configure.")
+    contradictory = sorted(name for name, found in scopes.items() if len(found) > 1)
+    out_of_environment = sorted(
+        {
+            (read.name, read.workflow, read.job)
+            for read in _job_reads()
+            if scopes.get(read.name) == {"environment"} and not read.in_environment
+        }
+    )
+
+    if undocumented or mismatched or contradictory or out_of_environment:
+        print("FAIL: the workflow contract does not match what an adopter is told to configure.")
         print()
         for name in undocumented:
             read_channels = "/".join(sorted(referenced[name]))
@@ -185,6 +309,13 @@ def main() -> int:
             print(f"  - {name} is read from `{read_from}.{name}` but documented under {doc_channel}")
             print(f"      in {where}.")
             print("      GitHub does NOT fall back between the two: the value arrives empty.")
+        for name in contradictory:
+            print(f"  - {name} is documented as both repository- and environment-scoped.")
+        for name, workflow, job in out_of_environment:
+            where = f"`{workflow}` {job}" if job == WORKFLOW_LEVEL else f"`{workflow}` job `{job}`"
+            print(f"  - {name} is documented as environment-scoped, but {where}")
+            print("      reads it without declaring `environment:`. GitHub exposes environment")
+            print("      values only to jobs in that environment: here it arrives empty.")
         print()
         print("  Fix the documentation, or change the workflow — but they have to agree.")
         return 1
@@ -192,7 +323,8 @@ def main() -> int:
     total_refs = sum(len(c) for c in referenced.values())
     print(
         f"[deploy-contract] OK — {len(referenced)} name(s) across {total_refs} reference(s) "
-        f"in the deploy workflows; each documented in the channel it is read from."
+        f"in {len(_workflows())} workflow(s); each documented in the channel it is read from, "
+        "and no environment-scoped value is read outside an environment."
     )
     return 0
 

@@ -92,15 +92,21 @@ Go to: `https://github.com/${GH_OWNER}/${GH_REPO}/settings/variables/actions`
 
 Add **repository variables** (NOT secrets — these are not sensitive):
 
-| Variable | Value |
-| ---------- | ------- |
-| `GCP_WIF_PROVIDER` | `projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL_ID}/providers/${PROVIDER_ID}` |
-| `GCP_SERVICE_ACCOUNT` | `${SA_EMAIL}` |
-| `GCP_PROJECT_ID` | `${PROJECT_ID}` |
-| `GCP_REGION` | e.g. `us-central1` |
-| `GKE_DEV_CLUSTER` | the GKE cluster name for dev |
-| `GKE_STAGING_CLUSTER` | the GKE cluster name for staging |
-| `GKE_PROD_CLUSTER` | the GKE cluster name for production |
+| Variable | Scope | Value |
+| ---------- | ------- | ------- |
+| `GCP_WIF_PROVIDER` | repository | `projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL_ID}/providers/${PROVIDER_ID}` |
+| `GCP_SERVICE_ACCOUNT` | repository | `${SA_EMAIL}` |
+| `GCP_PROJECT_ID` | repository | `${PROJECT_ID}` |
+| `GCP_REGION` | repository | e.g. `us-central1` |
+| `GKE_DEV_CLUSTER` | repository | the GKE cluster name for dev |
+| `GKE_STAGING_CLUSTER` | repository | the GKE cluster name for staging |
+| `GKE_PROD_CLUSTER` | repository | the GKE cluster name for production |
+
+All of these are repository-scoped. `deploy-gcp.yml` reads them in its
+top-level `env`, its build job and its caller jobs, none of which run in an
+environment, so an environment-scoped value would reach them as an empty
+string. The scheduled workflows authenticate as their own
+service accounts; the full table is in `docs/environment-promotion.md`.
 
 If the deploy chain still references `secrets.GCP_SA_KEY` after this runbook,
 **delete that secret from the repo** — leaving it around invites someone to
