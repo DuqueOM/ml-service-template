@@ -1,5 +1,5 @@
 # Minimal example dependencies
-scikit-learn         ~= 1.9.0
+scikit-learn         ~= 1.9.1
 pandas               ~= 3.0.5
 numpy                ~= 1.26.4
 fastapi              ~= 0.141.1
