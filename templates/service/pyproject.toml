@@ -43,7 +43,7 @@ dependencies = [
     # Data Validation
     "pandera ~= 0.23.0",
     # Explainability
-    "shap ~= 0.46.0",
+    "shap ~= 0.51.0",
     # Monitoring
     "prometheus-client ~= 0.21.0",
     "pyarrow ~= 18.0.0",
