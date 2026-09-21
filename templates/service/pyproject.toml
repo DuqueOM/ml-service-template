@@ -37,7 +37,7 @@ dependencies = [
     "scipy ~= 1.17.1",         # champion/challenger significance tests
     "joblib ~= 1.4.0",
     # Serving
-    "fastapi ~= 0.115.0",
+    "fastapi ~= 0.141.1",
     "uvicorn ~= 0.53.0",
     "pydantic ~= 2.13.5",
     # Data Validation
@@ -47,7 +47,7 @@ dependencies = [
     # Monitoring
     "prometheus-client ~= 0.26.0",
     "pyarrow ~= 18.0.0",
-    "pyyaml ~= 6.0.0",
+    "pyyaml ~= 6.0.3",
 ]
 
 [project.optional-dependencies]
@@ -56,7 +56,7 @@ dependencies = [
 # dependency scan reported, and no code that runs in the image imports them
 # (ADR-047, ADR-049).
 train = [
-    "mlflow ~= 3.16.0",       # ADR-047
+    "mlflow ~= 3.16.1",       # ADR-047
     "skops ~= 0.14.0",        # MLflow 3.x sklearn serialiser; imported by train.py
     "optuna ~= 4.1.0",
     # "imbalanced-learn ~= 0.12.0",  # optional: SMOTE / undersampling
@@ -72,10 +72,10 @@ dev = [
     # declared here, so every generated service installed three linters it
     # never runs — and did not declare the one it does. Dependabot noticed
     # before we did: it opened a PR bumping flake8.
-    "ruff ~= 0.16.6",
+    "ruff ~= 0.16.8",
     "mypy ~= 1.13.0",
     "bandit ~= 1.7.10",
-    "pre-commit ~= 3.7.0",
+    "pre-commit ~= 4.6.2",
 ]
 
 # Optional heavy ML dependencies — uncomment if needed
