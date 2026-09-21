@@ -74,7 +74,7 @@ dev = [
     # before we did: it opened a PR bumping flake8.
     "ruff ~= 0.16.8",
     "mypy ~= 2.3.1",
-    "bandit ~= 1.7.10",
+    "bandit ~= 1.9.4",
     "pre-commit ~= 4.6.2",
 ]
 
