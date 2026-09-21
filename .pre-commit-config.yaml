@@ -115,7 +115,7 @@ repos:
   # valid Python package name"). The scaffolded SERVICE gets its
   # OWN per-service hook config (templates/service/.pre-commit-config.yaml).
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.13.0
+    rev: v2.3.1
     hooks:
       - id: mypy
         args:

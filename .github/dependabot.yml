@@ -134,6 +134,17 @@ updates:
       # Lift this when the numpy boundary itself is measured and moved.
       - dependency-name: "shap"
         versions: [">=0.50"]
+      # pandas 3.x cannot be installed in this group: the EDA lane's heavy
+      # mode pulls ydata-profiling, and every version of it up to 4.18.4
+      # requires `pandas!=1.4.0, <3.0 and >1.5`. Proven by the self-audit
+      # lane on #220, which resolves every requirements file to exact
+      # versions and reported ResolutionImpossible naming that pair — #212
+      # and #216 proposed the bump one file at a time and neither could have
+      # resolved. The worked example is a SEPARATE co-installation group
+      # without ydata-profiling and is already on pandas 3, so this entry is
+      # about this group only. Lift it when ydata-profiling supports pandas 3.
+      - dependency-name: "pandas"
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: "deps"
     labels:

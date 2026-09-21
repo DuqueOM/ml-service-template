@@ -279,7 +279,7 @@ jobs:
 
       - name: Block promotion (C/C blocked or keep)
         if: steps.cvsc.outputs.exit_code == '2' || steps.cvsc.outputs.exit_code == '1'
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const decision = '${{ steps.cvsc.outputs.exit_code }}' === '2' ? 'BLOCKED' : 'KEPT (no promotion)';
@@ -293,7 +293,7 @@ jobs:
 
       - name: Create failure issue (if gates fail)
         if: steps.gates.outcome == 'failure'
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             await github.rest.issues.create({
