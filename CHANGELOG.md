@@ -19,8 +19,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 One batch rather than ten merges, because these updates are not independent:
 the drift gate requires the payload's action pins to match the root
-workflows', and Dependabot opens a separate PR per directory. Supersedes
-#186-#192, #194 and #195.
+workflows', and Dependabot opens a separate PR per directory. This batch
+supersedes PRs #186 through #192, plus #194 and #195.
 
 - Generated service: `scikit-learn ~= 1.9.1`, `uvicorn ~= 0.53.0`,
   `pydantic ~= 2.13.5`, `prometheus-client ~= 0.26.0`, in both
