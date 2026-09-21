@@ -13,7 +13,7 @@
 ## 1. Scaffold a service
 
 ```bash
-copier copy --vcs-ref=v0.28.0 https://github.com/DuqueOM/ml-service-template.git my_service
+copier copy --vcs-ref=v0.29.0 https://github.com/DuqueOM/ml-service-template.git my_service
 cd my_service
 ```
 
