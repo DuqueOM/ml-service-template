@@ -52,7 +52,7 @@ its unit tests + contract tests on your laptop. No cluster yet.
 **Run**:
 
 ```bash
-copier copy --vcs-ref=v0.28.0 https://github.com/DuqueOM/ml-service-template.git ChurnPredictor
+copier copy --vcs-ref=v0.29.0 https://github.com/DuqueOM/ml-service-template.git ChurnPredictor
 cd ChurnPredictor
 # Option A: uv (recommended, 10× faster)
 uv sync

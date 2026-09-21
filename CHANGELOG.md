@@ -15,6 +15,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+*Nothing yet.*
+
+## [v0.29.0] - 2026-09-21
+
+Bump level: **`v0.x.0`, MAJOR-class** (`docs/RELEASING.md` §2.1). Several
+changes below break an adopter contract — cloud identity names, the runtime
+secret addressing scheme, the workflow values a scheduled lane reads — so this
+carries the full MAJOR paperwork on the pre-GA channel: the
+`### Breaking for adopters` block below, and a matching `from → to` section in
+[`MIGRATION.md`](MIGRATION.md). `v1.0.0` stays reserved for the first real
+cloud E2E evidence (§2).
+Release notes: [`releases/v0.29.0.md`](releases/v0.29.0.md).
+
+### Breaking for adopters
+
+| Change | Manual action required |
+| -------- | ------------------------ |
+| **Overlays name the cloud identities Terraform creates** | Replace `{PROJECT_NAME}` with your Terraform `project_name` in every `gcp-*` and `aws-*` overlay: `patch-serviceaccount.yaml`, the new `patch-serviceaccount-drift.yaml`, and `patch-deployment.yaml` (`SECRETS_PREFIX`). The previous annotations named a GSA and an IAM role Terraform never created, so pods had no cloud identity at all. |
+| **Workload Identity and IRSA bind `<service>-<env>/<service>-sa`** | Run `terraform plan` first. GCP's three `*_workload_identity` bindings gained a `for_each`; move each with `terraform state mv 'google_service_account_iam_member.runtime_workload_identity' 'google_service_account_iam_member.runtime_workload_identity["<service>"]'`, then apply. AWS trust policies update in place. |
+| **AWS GitHub OIDC trust names the GitHub environment** | `terraform apply` before your next AWS deploy. The subject is now `repo:<owner>/<repo>:environment:aws-<environment>`; the previous `environment:<environment>` matched no job, so no deploy job could assume the role. |
+| **Cloud secret ids follow Terraform's scheme, key lowercased** | Store `API_KEY` under `<project>-<service>-api_key` (GCP) or `<project>/<service>/api_key` (AWS). Any other key your code resolves in staging or production must be named lowercase under the same prefix. |
+| **Deploy images are built with `--build-arg CLOUD_PROVIDER`** | None if you use the shipped `deploy-*.yml`. If you build images yourself for staging or production, pass it — without the SDK every authenticated request returns 503. |
+| **Scheduled workflows use their own repository-scoped identities** | Add `AWS_CI_ROLE_ARN` (secret) and `GCP_CI_SERVICE_ACCOUNT` (variable) for the nightly plan, `AWS_DRIFT_ROLE_ARN` / `GCP_DRIFT_SERVICE_ACCOUNT` for drift, `AWS_RETRAIN_ROLE_ARN` / `GCP_RETRAIN_SERVICE_ACCOUNT` for retrain. They previously read `AWS_ROLE_ARN`, which is environment-scoped and reached them empty. Delete the nightly plan's old `GCP_WIF_PROVIDER` and `GCP_SA_EMAIL` **secrets**; both are read from variables now. |
+| **`GCP_PROJECT_ID` and the `GKE_*` / `EKS_*` names are repository variables** | If you created them per environment following the old `environment-promotion.md`, move them to repository level. The top-level `env`, the build job and the caller jobs that read them declare no environment. |
+| **The drift CronJob runs as `<service>-drift-sa`** | None with the shipped overlays. If you patch the CronJob, keep that ServiceAccount: the drift identity is bound to it, not to the predictor's. |
+| **The runtime Role no longer grants `secrets: get`** | If your own code reads Kubernetes Secrets through the API, add a narrowly scoped rule back in your overlay. Nothing in the template reads them. |
+| **`var.environment` is validated to `dev`, `staging` or `production`** | If you passed `prod`, pass `production`. The namespace suffix `prod` is derived from it. |
+| **`service_names` defaults to your service, not `fraud-detector`** | If you relied on the default creating `fraud-detector` identities and secrets, set `service_names` explicitly. |
+| **The mypy pre-commit hook moves to `v2.3.1`** | Run `pre-commit install --install-hooks` once. The hook and the dev requirement now agree; they were on 1.13.0 and 2.3.1 respectively. |
+| **New files in the scaffolded output** | None. `k8s/base/networkpolicy-smoke-test.yaml`, `.github/dependabot.yml` and `.github/workflows/dependabot-auto-merge.yml` are additive. The last two give a generated service the same dependency policy this repository uses, including the numpy 1.x boundary. |
+
 ### Added — D-05 is an assertion now, not a setting
 
 - `scripts/check_pin_shape.py` (gate 21) requires every declared dependency in
@@ -36,6 +67,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 - `templates/tests/governance/test_pin_shape.py` carries the three shapes that
   pass as "pinned" to a reader as negative controls, plus the empty-scan
   refusal and the current tree as the positive control.
+
+### Changed — pytest ~= 9.1.1 in the generated service
+
+- A major, evaluated rather than trusted: the payload suite reports
+  689 passed / 19 skipped under both pytest 8.3.5 and 9.1.1, in a virtualenv
+  built from the current pins. `pytest-cov` stays at `~= 6.0.0` because it
+  loads and reports under pytest 9.
 
 ### Changed — three majors, measured rather than trusted (ADR-052)
 
@@ -69,6 +107,218 @@ expected and is why majors are batched by hand.
 - Dependabot now ignores pandas majors in the service+EDA group with that
   reason inline. The worked example is a separate co-installation group with
   no ydata-profiling and stays on pandas 3.
+
+### Added — dependency updates merge on green (ADR-052)
+
+- `.github/workflows/dependabot-auto-merge.yml` queues `gh pr merge --auto`
+  for patch, minor and digest updates. GitHub merges only after every required
+  check passes, so the gate is unchanged and the wait is gone. Majors are never
+  queued: a major asks whether a boundary should move, which CI cannot answer.
+- The generated service inherits the same policy:
+  `templates/service/.github/dependabot.yml` is new, and the payload ships its
+  own copy of the workflow. The numpy 1.x and shap boundaries travel with it,
+  each with the reason inline, so an adopter does not have to rediscover why
+  numpy is pinned.
+
+### Fixed — action bumps were red by construction
+
+- The two `github-actions` Dependabot entries used a singular `directory:`,
+  one per tree, so every action bump arrived as half a change and
+  `check_cicd_template_drift.py` rejected it: #186, #187, #197 and #199 were
+  all red for that reason and none of them was wrong. The file's own comment
+  said scanning both directories "lets one PR satisfy it", which was the
+  intent, not the implementation. One entry with `directories:` now covers
+  `/` and `/templates/service`, grouped for patch and minor.
+
+### Changed — dependency batch, second wave of 2026-09-21
+
+Eleven more Dependabot PRs, same two reasons for batching: the drift gate
+requires the payload's action pins to match the root workflows', and a pin
+shared between files must move in all of them at once. This wave supersedes
+PRs #197 through #200 and #202 through #207.
+
+- Generated service: `fastapi ~= 0.141.1`, `pyyaml ~= 6.0.3` (also in
+  `eda/requirements.txt`), `mlflow ~= 3.16.1`, `ruff ~= 0.16.8`,
+  `pre-commit ~= 4.6.2`, and the matching `pyproject.toml` entries.
+- Worked example: `pandas ~= 3.0.6`.
+- Action pins: `bridgecrewio/checkov-action` v12.3125.0 and
+  `codecov/codecov-action` v7 in both trees, `docker/setup-buildx-action` v4
+  in the golden path.
+
+`#207` proposed `pyyaml` in `eda/requirements.txt` alone, which
+`check_dependency_pin_coherence.py` rejects: the service group installs that
+file next to `requirements.txt`, so the two must agree byte for byte.
+
+### Fixed — the shap ignore threshold was one release too high
+
+- The ignore added earlier today said `shap >= 0.51`, and `shap 0.50` arrived
+  hours later with the same defect: it requires `numpy >= 2`, which D-05
+  excludes. Dependabot's own CI proved it in #201 exactly as it had in #193.
+  numpy 2 is the boundary, so the threshold is now `>= 0.50`, where shap
+  crossed it.
+
+### Changed — dependency batch, 2026-09-21
+
+One batch rather than ten merges, because these updates are not independent:
+the drift gate requires the payload's action pins to match the root
+workflows', and Dependabot opens a separate PR per directory. This batch
+supersedes PRs #186 through #192, plus #194 and #195.
+
+- Generated service: `scikit-learn ~= 1.9.1`, `uvicorn ~= 0.53.0`,
+  `pydantic ~= 2.13.5`, `prometheus-client ~= 0.26.0`, in both
+  `requirements.txt` and `pyproject.toml`.
+- Worked example: `scikit-learn ~= 1.9.1`, `uvicorn ~= 0.53.0`.
+- Action pins bumped in the root workflows **and** their payload copies:
+  `codecov/codecov-action` v7 SHA, `bridgecrewio/checkov-action` v12.3123.0,
+  `github/codeql-action/upload-sarif` v4.38.0.
+
+### Fixed — shap cannot follow the numpy 1.x boundary
+
+- `shap >= 0.51` requires `numpy >= 2`, and D-05 pins numpy 1.x because
+  numpy 2.x silently corrupts joblib-serialised models. #193's CI said so
+  outright: `ResolutionImpossible`, `shap 0.51.0 depends on numpy>=2` against
+  `The user requested numpy~=1.26.0`. Dependabot now ignores `shap >= 0.51`
+  with that reason recorded, so the proposal stops returning weekly while the
+  boundary stands. The boundary's own rationale is still unmeasured, and that
+  remains the open question, not the bump.
+
+### Fixed — no staging or production pod could authenticate a request, and the deploy went green
+
+Four layers each chose a name, and no two chose the same one. See
+[ADR-051](docs/decisions/ADR-051-runtime-identity-and-secret-addressing.md).
+
+- **Workload identity was bound to nothing, on both clouds.** Terraform bound
+  GCP Workload Identity to `ml-services/<project>-sa` and trusted
+  `system:serviceaccount:ml-services:<service>` for IRSA. Pods run as
+  `<service>-sa` in `<service>-<env>`. The overlays annotated a GSA and an IAM
+  role that Terraform never creates. Terraform now derives every binding and
+  trust subject from the overlay coordinates. The overlays name the identities
+  Terraform creates, and `var.environment` is validated.
+- **The drift CronJob ran as the predictor's identity.** It now runs as
+  `<service>-drift-sa`, which is what ADR-017's drift identity is bound to.
+  The AWS drift role can also read the `latest.csv` object the job downloads.
+- **The secret loader asked for names nothing creates.** It requested
+  `<slug>-API_KEY`, while Terraform creates `<project>-<service>-api_key`. It
+  read `ENV`, while the overlays set `ENVIRONMENT`. It detected no cloud on
+  GKE, and no image carried a cloud SDK. Overlays now set `CLOUD_PROVIDER` and
+  `SECRETS_PREFIX`. `secret_id()` reproduces Terraform's scheme, and deploy
+  images are built with their cloud's SDK. Lookups are cached with a TTL. A
+  backend fault fails closed with 503 instead of an unhandled 500.
+- **The smoke test could see none of it, and could not have run.** It probed
+  only `/ready`. Its tag-pinned pod is rejected by Kyverno in staging and
+  production, and it lacked the PSS `restricted` securityContext prod
+  enforces. NetworkPolicy default-deny also blocked it both ways. It is now
+  digest-pinned, restricted, and admitted by `networkpolicy-smoke-test.yaml`.
+  It probes `/model/info` with a deliberately wrong key: 401 proves the secret
+  resolved, 503 fails the deploy.
+- `docs/runbooks/secrets-integration-e2e.md` could not run. It set a variable
+  the loader never read and passed an argument that does not exist. It is
+  rewritten against the real API, with an in-cluster procedure.
+- `test_secrets.py` leaked a cached `.env.local` into later tests, so
+  `test_auth.py` failed depending on collection order.
+
+### Fixed — local use
+
+- `.env.local` was not gitignored, in this repository or the generated service.
+  `common_utils.secrets` reads it in the local profile and documents it as
+  "not committed", but nothing enforced that.
+- `.env.example` suggested `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` for
+  local DVC. It now points at ambient credentials (`gcloud auth
+  application-default login`, or `aws sso login` plus `AWS_PROFILE`), per D-17
+  and D-35.
+- `make eda` looked for `eda/run_eda.py`, which does not exist, and printed a
+  hint instead of running. It now runs `eda/eda_pipeline.py` with its required
+  `--input` and `--target`, exposed as `DATA_PATH` and `EDA_TARGET`.
+
+### Fixed — CI identities read from the wrong scope, or trusted for a subject no job presents
+
+- **No AWS deploy job could assume its role.** Terraform's GitHub OIDC trust
+  allowed `repo:<owner>/<repo>:environment:<environment>`. A job that declares
+  `environment: aws-production` presents `environment:aws-production`. The
+  trust is now `environment:aws-<environment>`, asserted against
+  `deploy-common.yml`'s environment naming by the runtime identity contract.
+- **The nightly Terraform plan, drift detection and retrain read an
+  environment-scoped deploy role from jobs with no environment.** For them
+  `AWS_ROLE_ARN` is an empty string, and the deploy role is the wrong identity
+  anyway. They now read purpose-named, repository-scoped identities:
+  `AWS_CI_ROLE_ARN` and `GCP_CI_SERVICE_ACCOUNT` for the plan,
+  `AWS_DRIFT_ROLE_ARN` and `GCP_DRIFT_SERVICE_ACCOUNT` for drift, and
+  `AWS_RETRAIN_ROLE_ARN` and `GCP_RETRAIN_SERVICE_ACCOUNT` for retrain.
+  Terraform trust and permissions for the drift and retrain identities are
+  tracked in #183.
+- **The nightly plan read GCP's federation values from `secrets`** as
+  `GCP_WIF_PROVIDER` and `GCP_SA_EMAIL`, while every other workflow reads them
+  from `vars`. It now uses `vars`.
+- **`environment-promotion.md` placed `GCP_PROJECT_ID` and the cluster names at
+  environment scope.** The top-level `env`, the build job and the caller jobs
+  that read them declare no environment. That document now carries one table of every value with its
+  channel, scope and reader, and the runbooks' tables carry a Scope column.
+
+### Fixed — the L3 alarms fired one way only
+
+- **The red-L3 issue was never closed.** `golden-path.yml` opened issue #177 on
+  2026-09-12 and nothing retracted it. The lane went green on the next two runs
+  while the issue kept telling every reader that L3 was failing. The lane now
+  closes its own issue, with the run that proves the claim no longer holds.
+- **The closed-loop lane notified nobody at all.** `golden-path-extended.yml`
+  is the only automated proof that a scaffolded service logs the predictions it
+  serves (D-21, D-22). It had never once been green before v0.28.0, and it runs
+  weekly and on demand, never on a PR, so a failure appeared in no checks. It
+  now opens and closes an issue under its own `golden-path-extended-red` label,
+  kept separate so one thread does not mix two lanes' reasons for failing.
+- `templates/tests/governance/test_lane_signals_both_ways.py` asserts, for every
+  golden-path lane, that it can both raise and retract its alarm under one
+  label, with `issues: write` and the right `needs.*.result` guard per
+  direction. It reads the labels from the workflows, so a new lane is covered
+  without editing the test.
+
+### Changed
+
+- `scripts/check_deploy_contract_documented.py` (gate 19) scans every payload
+  workflow instead of `deploy-*.yml`. It also fails when a value documented as
+  environment-scoped is read by a job that declares no environment, or calls no
+  reusable workflow that does. On the pre-fix tree it reports the nightly plan,
+  drift and retrain jobs.
+
+### Added
+
+- `tests/test_runtime_identity_contract.py`. It evaluates Terraform
+  interpolations against every cloud overlay: binding, annotation, secret
+  name, IAM scope, smoke admissibility and image backend. It keeps no hand-kept
+  table of names. On the pre-fix tree it fails all 22 cases, each on its own
+  defect.
+- `requirements-gcp.txt` and `requirements-aws.txt`, installed only for cloud
+  images through `--build-arg CLOUD_PROVIDER`.
+
+### Security
+
+- The runtime Role no longer grants `secrets: get`. Nothing reads Kubernetes
+  Secrets, and the grant was standing access for the "external-secrets"
+  integration a comment claimed and no manifest shipped.
+
+### Known follow-ons
+
+- **L4 remains unproven.** No cloud deployment is claimed. What changed is that
+  the template-side blockers to attempting one are gone: pods can assume their
+  identity, resolve their secrets, and the post-deploy smoke test fails when
+  they cannot.
+- **The drift CronJob has no NetworkPolicy path** under the namespace's
+  default-deny: its pods are labelled `<service>-drift` and no allow policy
+  selects them, so DNS, bucket and Pushgateway egress are blocked on any
+  cluster that enforces policies ([#182](https://github.com/DuqueOM/ml-service-template/issues/182)).
+- **GitHub Actions has no Terraform-backed identity for the nightly plan, drift
+  and retrain.** This release fixes the channel, scope and naming; the trust and
+  permission side is open ([#183](https://github.com/DuqueOM/ml-service-template/issues/183)).
+- **The numpy 1.x boundary's rationale is still unmeasured.** It now blocks
+  `shap >= 0.50` and `pandas` majors as well, each recorded with its reason.
+  Crossing it needs a measured round-trip of a fitted pipeline, an ADR and a
+  release of its own.
+- **pandas 3 cannot enter the service group** while the EDA lane's heavy mode
+  pulls `ydata-profiling`, which requires `pandas < 3.0`. The worked example is
+  a separate group and is already on pandas 3.
+- **The first auto-merge has happened; the first auto-merged *regression* has
+  not.** ADR-052 is explicit that the quality of the automation is now the
+  quality of the gates.
 
 ## [v0.28.0] - 2026-09-12
 
