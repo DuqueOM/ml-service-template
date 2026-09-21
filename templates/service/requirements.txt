@@ -37,7 +37,7 @@ shap                 ~= 0.46.0    # KernelExplainer, loaded lazily by the app
 # Monitoring
 prometheus-client    ~= 0.26.0
 pyarrow              ~= 18.0.0    # parquet backend for prediction_logger (ADR-006)
-pyyaml               ~= 6.0.0     # config + ground-truth loaders
+pyyaml               ~= 6.0.3     # config + ground-truth loaders
 
 # Optional — uncomment if needed:
 # xgboost            ~= 2.1.0
