@@ -1,0 +1,50 @@
+name: Dependabot auto-merge
+
+# Merge low-risk dependency updates when CI is green; leave majors to a human.
+#
+# Why this exists (ADR-052): reviewing every Dependabot PR by hand does not
+# scale and does not add judgement. On 2026-09-21 twenty-one of them were open
+# across two waves, and the review of each came down to reading a version
+# number — while the decisions that actually mattered were made once, in
+# configuration: shap cannot cross the numpy 1.x boundary (D-05), and an
+# action bump has to move both trees at once or `check_cicd_template_drift.py`
+# rejects it. CI already answers "does this break anything". A human is needed
+# for "should this boundary move", which is what a major usually asks.
+#
+# The gate is the branch's required checks, not this workflow: `--auto` queues
+# the merge and GitHub performs it only once every required check has passed.
+# If a check fails, the PR stays open with the failure attached.
+on:
+  pull_request:
+
+permissions:
+  contents: write        # queue the merge
+  pull-requests: write   # set auto-merge on the PR
+
+jobs:
+  auto-merge:
+    name: Queue merge for non-major updates
+    # Dependabot-authored PRs only. `github.actor` would also match a human
+    # who pushed to a dependabot/* branch; the PR author does not.
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read Dependabot's metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Queue auto-merge (patch, minor, digest)
+        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr merge --auto --squash "$PR_URL"
+          echo "::notice::Auto-merge queued (${{ steps.metadata.outputs.update-type }}). GitHub merges it when every required check passes."
+
+      - name: Leave majors for a human
+        if: steps.metadata.outputs.update-type == 'version-update:semver-major'
+        run: |
+          echo "::notice::Major update — not auto-merged. A major asks whether a boundary should move, which CI cannot answer. Review it, or add an ignore entry with the reason (ADR-052)."

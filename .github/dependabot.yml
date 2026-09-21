@@ -3,35 +3,37 @@
 
 version: 2
 updates:
-  # GitHub Actions
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-      day: "thursday"
-    open-pull-requests-limit: 3
-    commit-message:
-      prefix: "ci"
-    labels:
-      - "dependencies"
-      - "github-actions"
-
-  # GitHub Actions — the SHIPPED workflows.
+  # GitHub Actions — BOTH trees in one PR.
   #
-  # `directory:` is resolved literally, so the entry above covers only
-  # `.github/workflows/` at the repo root. The nine workflows under
-  # `templates/service/.github/workflows/` were never scanned, which is the
-  # same blind spot documented for terraform below — and it had a second
-  # effect: `check_cicd_template_drift.py` requires the runtime and template
-  # copies to pin identical versions, so every action bump Dependabot opened
-  # was HALF a change and failed that gate by construction. Scanning both
-  # directories lets one PR satisfy it.
+  # `check_cicd_template_drift.py` requires the runtime workflows and their
+  # copies under `templates/service/.github/workflows/` to pin identical
+  # versions. Two entries with a singular `directory:` produced two PRs, each
+  # carrying half the change, so every action bump failed that gate on
+  # arrival: #186, #187, #197, #199 were all red for that reason and none of
+  # them was wrong. The comment that used to sit here said scanning both
+  # directories "lets one PR satisfy it" — the intent was right and the
+  # implementation was two entries, which is exactly the shape this repository
+  # keeps finding: a comment asserting a control nobody built.
+  #
+  # `directories:` (plural) puts both trees in one PR, which is also what
+  # makes an action bump auto-mergeable (ADR-052).
   - package-ecosystem: "github-actions"
-    directory: "/templates/service"
+    directories:
+      - "/"
+      - "/templates/service"
     schedule:
       interval: "weekly"
       day: "thursday"
     open-pull-requests-limit: 3
+    # Same split as the Python entries: patch, minor and digest bumps travel
+    # together and merge on green; a MAJOR arrives alone and waits for a human.
+    groups:
+      actions-low-risk:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
     commit-message:
       prefix: "ci"
     labels:

@@ -15,6 +15,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Added — dependency updates merge on green (ADR-052)
+
+- `.github/workflows/dependabot-auto-merge.yml` queues `gh pr merge --auto`
+  for patch, minor and digest updates. GitHub merges only after every required
+  check passes, so the gate is unchanged and the wait is gone. Majors are never
+  queued: a major asks whether a boundary should move, which CI cannot answer.
+- The generated service inherits the same policy:
+  `templates/service/.github/dependabot.yml` is new, and the payload ships its
+  own copy of the workflow. The numpy 1.x and shap boundaries travel with it,
+  each with the reason inline, so an adopter does not have to rediscover why
+  numpy is pinned.
+
+### Fixed — action bumps were red by construction
+
+- The two `github-actions` Dependabot entries used a singular `directory:`,
+  one per tree, so every action bump arrived as half a change and
+  `check_cicd_template_drift.py` rejected it: #186, #187, #197 and #199 were
+  all red for that reason and none of them was wrong. The file's own comment
+  said scanning both directories "lets one PR satisfy it", which was the
+  intent, not the implementation. One entry with `directories:` now covers
+  `/` and `/templates/service`, grouped for patch and minor.
+
 ### Changed — dependency batch, second wave of 2026-09-21
 
 Eleven more Dependabot PRs, same two reasons for batching: the drift gate

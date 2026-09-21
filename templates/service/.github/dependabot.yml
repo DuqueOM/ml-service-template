@@ -1,0 +1,101 @@
+# Dependabot configuration for this service.
+#
+# Two rules shape it, and both come from the template this service was
+# generated from:
+#
+#   1. Low-risk updates (patch, minor, digest) are grouped and merged by
+#      `.github/workflows/dependabot-auto-merge.yml` once every required check
+#      passes. A MAJOR always arrives on its own and waits for a person.
+#   2. A pin with a correctness reason is an `ignore` entry WITH that reason
+#      written down, not a silently closed PR. A boundary nobody can read gets
+#      crossed by a robot that cannot read it either.
+#
+# `directory:` is resolved literally and does not recurse. Every file that
+# declares a dependency needs to fall under one of the entries below, or it is
+# unwatched — which is a control that reports nothing while looking present.
+version: 2
+updates:
+  # Python — the served image, the training extras and the EDA lane. One entry
+  # with `directories:` so a pin shared between the two files moves in one PR;
+  # the service's own `check_dependency_pin_coherence.py` equivalent (the
+  # tutorial installs them into one environment) rejects half a change.
+  - package-ecosystem: "pip"
+    directories:
+      - "/"
+      - "/eda"
+    # `increase` raises the floor and PRESERVES the `~=` shape. Dependabot's
+    # pip default WIDENS a constraint (`~=1.5` becomes `>=1.5,<3.0`), which
+    # silently admits a major — the opposite of what compatible-release
+    # pinning is for (D-05).
+    versioning-strategy: increase
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      service-python:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      # numpy 2.x silently corrupts joblib-serialised models (D-05). This is a
+      # correctness boundary, not a convenience pin: crossing it needs a
+      # measured round-trip of a fitted pipeline, not a version bump.
+      - dependency-name: "numpy"
+        update-types: ["version-update:semver-major"]
+      # shap >= 0.50 requires numpy >= 2, so it cannot be installed alongside
+      # the pin above: `pip install -r requirements.txt` exits
+      # ResolutionImpossible. Lift this together with the numpy boundary.
+      - dependency-name: "shap"
+        versions: [">=0.50"]
+    commit-message:
+      prefix: "deps"
+    labels: ["dependencies", "python"]
+
+  # GitHub Actions — pinned by commit SHA, so without this entry the pins rot
+  # and the workflow runs a version nobody chose.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    groups:
+      actions-low-risk:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    commit-message:
+      prefix: "ci"
+    labels: ["dependencies", "github-actions"]
+
+  # Container images — the served image's base and the demo compose stack.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    groups:
+      images:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    commit-message:
+      prefix: "build"
+    labels: ["dependencies", "docker"]
+
+  # Terraform — one entry per root module, because `directory:` does not
+  # recurse and the bootstrap modules are separate roots with their own
+  # provider constraints.
+  - package-ecosystem: "terraform"
+    directories:
+      - "/infra/terraform/gcp"
+      - "/infra/terraform/gcp/bootstrap"
+      - "/infra/terraform/aws"
+      - "/infra/terraform/aws/bootstrap"
+      - "/infra/terraform/cloudflare"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    groups:
+      providers:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    commit-message:
+      prefix: "infra"
+    labels: ["dependencies", "terraform"]
