@@ -24,7 +24,7 @@ scipy                ~= 1.17.1    # champion/challenger significance tests
 joblib               ~= 1.4.0
 
 # Serving
-fastapi              ~= 0.115.0
+fastapi              ~= 0.141.1
 uvicorn              ~= 0.53.0
 pydantic             ~= 2.13.5
 
