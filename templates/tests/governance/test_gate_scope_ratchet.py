@@ -76,6 +76,7 @@ SCOPE: dict[str, tuple[str, int, str]] = {
     "check_test_clock_isolation": (r"scanned (\d+) test file", 17, "test files scanned"),
     "check_control_claims": (r"OK — \d+ of (\d+) anti-patterns", 38, "anti-patterns scanned"),
     "check_dependency_pin_coherence": (r"OK — (\d+) requirements file", 6, "requirements files grouped"),
+    "check_pin_shape": (r"OK — (\d+) pin\(s\)", 74, "dependency pins checked"),
     "check_dependency_partition": (r"OK — (\d+) runtime module", 16, "runtime modules walked"),
     "check_config_is_read": (r"OK — (\d+) declared field", 51, "config fields checked"),
     "check_deploy_contract_documented": (r"OK — (\d+) name\(s\)", 28, "workflow names checked"),

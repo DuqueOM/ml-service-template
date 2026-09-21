@@ -819,6 +819,12 @@ jobs:
         # pins out from under it.
         run: python3 scripts/check_dependency_pin_coherence.py
 
+      - name: Every dependency is declared with compatible-release pinning (D-05)
+        # A widened range reports as pinned and passes every other dependency
+        # gate while still admitting the next major. Dependabot proposes that
+        # shape by default for projects it reads as libraries.
+        run: python3 scripts/check_pin_shape.py
+
   agentic-adapter-drift:
     name: Agentic Adapter Drift Gate
     runs-on: ubuntu-latest

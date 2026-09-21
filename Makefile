@@ -187,6 +187,7 @@ GATES := \
 	check_markdownlint_parity \
 	check_test_clock_isolation \
 	check_dependency_pin_coherence \
+	check_pin_shape \
 	check_dependency_partition \
 	check_config_is_read \
 	check_deploy_contract_documented \
