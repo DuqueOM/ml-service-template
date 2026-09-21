@@ -31,21 +31,21 @@ dependencies = [
     # three groups (ADR-035 I-035-1) and the template repo's
     # `check_dependency_partition.py` gate keeps them in lockstep.
     # ML Core
-    "scikit-learn ~= 1.5.0",
+    "scikit-learn ~= 1.9.1",
     "pandas ~= 2.2.0",
     "numpy ~= 1.26.0",         # numpy 2.x silently corrupts joblib models
     "scipy ~= 1.17.1",         # champion/challenger significance tests
     "joblib ~= 1.4.0",
     # Serving
     "fastapi ~= 0.115.0",
-    "uvicorn ~= 0.32.0",
-    "pydantic ~= 2.10.0",
+    "uvicorn ~= 0.53.0",
+    "pydantic ~= 2.13.5",
     # Data Validation
     "pandera ~= 0.23.0",
     # Explainability
     "shap ~= 0.46.0",
     # Monitoring
-    "prometheus-client ~= 0.21.0",
+    "prometheus-client ~= 0.26.0",
     "pyarrow ~= 18.0.0",
     "pyyaml ~= 6.0.0",
 ]

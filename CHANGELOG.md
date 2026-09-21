@@ -15,6 +15,31 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Changed — dependency batch, 2026-09-21
+
+One batch rather than ten merges, because these updates are not independent:
+the drift gate requires the payload's action pins to match the root
+workflows', and Dependabot opens a separate PR per directory. Supersedes
+#186-#192, #194 and #195.
+
+- Generated service: `scikit-learn ~= 1.9.1`, `uvicorn ~= 0.53.0`,
+  `pydantic ~= 2.13.5`, `prometheus-client ~= 0.26.0`, in both
+  `requirements.txt` and `pyproject.toml`.
+- Worked example: `scikit-learn ~= 1.9.1`, `uvicorn ~= 0.53.0`.
+- Action pins bumped in the root workflows **and** their payload copies:
+  `codecov/codecov-action` v7 SHA, `bridgecrewio/checkov-action` v12.3123.0,
+  `github/codeql-action/upload-sarif` v4.38.0.
+
+### Fixed — shap cannot follow the numpy 1.x boundary
+
+- `shap >= 0.51` requires `numpy >= 2`, and D-05 pins numpy 1.x because
+  numpy 2.x silently corrupts joblib-serialised models. #193's CI said so
+  outright: `ResolutionImpossible`, `shap 0.51.0 depends on numpy>=2` against
+  `The user requested numpy~=1.26.0`. Dependabot now ignores `shap >= 0.51`
+  with that reason recorded, so the proposal stops returning weekly while the
+  boundary stands. The boundary's own rationale is still unmeasured, and that
+  remains the open question, not the bump.
+
 ### Fixed — no staging or production pod could authenticate a request, and the deploy went green
 
 Four layers each chose a name, and no two chose the same one. See

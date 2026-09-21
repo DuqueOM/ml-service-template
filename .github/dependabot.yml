@@ -122,6 +122,15 @@ updates:
       # that has been closed four times.
       - dependency-name: "numpy"
         update-types: ["version-update:semver-major"]
+      # shap >= 0.51 requires numpy >= 2, and D-05 pins numpy 1.x because
+      # numpy 2.x silently corrupts joblib-serialised models. #193 proved it:
+      # `pip install -r requirements.txt` exits ResolutionImpossible, naming
+      # `shap 0.51.0 depends on numpy>=2` against `The user requested
+      # numpy~=1.26.0`. The boundary is the decision; this entry stops
+      # Dependabot re-proposing a bump that cannot resolve until the numpy
+      # boundary itself is measured and moved.
+      - dependency-name: "shap"
+        versions: [">=0.51"]
     commit-message:
       prefix: "deps"
     labels:
@@ -145,6 +154,15 @@ updates:
       # repository's gates exist to reject, reproduced by hand.
       - dependency-name: "numpy"
         update-types: ["version-update:semver-major"]
+      # shap >= 0.51 requires numpy >= 2, and D-05 pins numpy 1.x because
+      # numpy 2.x silently corrupts joblib-serialised models. #193 proved it:
+      # `pip install -r requirements.txt` exits ResolutionImpossible, naming
+      # `shap 0.51.0 depends on numpy>=2` against `The user requested
+      # numpy~=1.26.0`. The boundary is the decision; this entry stops
+      # Dependabot re-proposing a bump that cannot resolve until the numpy
+      # boundary itself is measured and moved.
+      - dependency-name: "shap"
+        versions: [">=0.51"]
     schedule:
       interval: "weekly"
       day: "thursday"
