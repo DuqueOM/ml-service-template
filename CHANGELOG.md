@@ -15,6 +15,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Added — D-05 is an assertion now, not a setting
+
+- `scripts/check_pin_shape.py` (gate 21) requires every declared dependency in
+  the payload, the EDA lanes and the worked example to use `~=`. It rejects a
+  widened range, an `==` pin (that belongs in a lockfile) and a bare name.
+  Measured: 74 pins across 11 files.
+- Dependabot opened
+  `dependabot/pip/templates/service/pytest-gte-8.3-and-lt-9.2`, which is the
+  shape it proposes when it **widens** a constraint: `pytest>=8.3,<9.2` in
+  place of `pytest ~= 9.1.1`. That branch is gone, because the `~= 9.1.1` pin
+  landed first, but nothing in the repository would have rejected the shape.
+  The coherence gate compares the two lanes' pins to each other and a widened
+  range agrees with itself; the partition gate looks at which distributions
+  appear, not how they are bounded.
+- A widened pin is worse than a wrong one: it reads as pinned, passes every
+  other dependency gate, and still hands the next major to whoever runs
+  `pip install` first — which is the numpy 2.x / joblib failure D-05 was
+  written for.
+- `templates/tests/governance/test_pin_shape.py` carries the three shapes that
+  pass as "pinned" to a reader as negative controls, plus the empty-scan
+  refusal and the current tree as the positive control.
+
 ### Changed — three majors, measured rather than trusted (ADR-052)
 
 ADR-052 sends majors to a person because a major asks whether a boundary
