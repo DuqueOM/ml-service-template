@@ -15,6 +15,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Changed — dependency batch, second wave of 2026-09-21
+
+Eleven more Dependabot PRs, same two reasons for batching: the drift gate
+requires the payload's action pins to match the root workflows', and a pin
+shared between files must move in all of them at once. This wave supersedes
+PRs #197 through #200 and #202 through #207.
+
+- Generated service: `fastapi ~= 0.141.1`, `pyyaml ~= 6.0.3` (also in
+  `eda/requirements.txt`), `mlflow ~= 3.16.1`, `ruff ~= 0.16.8`,
+  `pre-commit ~= 4.6.2`, and the matching `pyproject.toml` entries.
+- Worked example: `pandas ~= 3.0.6`.
+- Action pins: `bridgecrewio/checkov-action` v12.3125.0 and
+  `codecov/codecov-action` v7 in both trees, `docker/setup-buildx-action` v4
+  in the golden path.
+
+`#207` proposed `pyyaml` in `eda/requirements.txt` alone, which
+`check_dependency_pin_coherence.py` rejects: the service group installs that
+file next to `requirements.txt`, so the two must agree byte for byte.
+
+### Fixed — the shap ignore threshold was one release too high
+
+- The ignore added earlier today said `shap >= 0.51`, and `shap 0.50` arrived
+  hours later with the same defect: it requires `numpy >= 2`, which D-05
+  excludes. Dependabot's own CI proved it in #201 exactly as it had in #193.
+  numpy 2 is the boundary, so the threshold is now `>= 0.50`, where shap
+  crossed it.
+
 ### Changed — dependency batch, 2026-09-21
 
 One batch rather than ten merges, because these updates are not independent:
