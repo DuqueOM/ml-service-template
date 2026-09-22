@@ -86,6 +86,17 @@ gcloud iam service-accounts add-iam-policy-binding "$SA_EMAIL" \
   --member="$WIF_PRINCIPAL"
 ```
 
+> **Terraform does steps 1 to 3 now.** `infra/terraform/gcp/wif.tf` creates the
+> pool, the provider (with an attribute condition pinning this repository) and
+> the `roles/iam.workloadIdentityUser` grants for the ci, deploy, drift and
+> retrain service accounts, whenever `github_repo` is set. Take
+> `GCP_WIF_PROVIDER` from the `github_workload_identity_provider` output and
+> the service-account emails from their own outputs. The manual steps below
+> remain the path for an adopter who federates some other way, or who already
+> has a pool and sets `github_repo = ""`. Until Terraform owned this, the
+> deploy chain worked only because somebody had run this runbook by hand, and
+> the scheduled workflows had no identity at all (#183).
+
 ## 4 — Configure the GitHub Variables (NOT Secrets)
 
 Go to: `https://github.com/${GH_OWNER}/${GH_REPO}/settings/variables/actions`

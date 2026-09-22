@@ -160,6 +160,23 @@ resource "aws_iam_policy" "ci" {
   })
 }
 
+# `terraform plan` refreshes every managed resource before it can diff, so a
+# plan-only identity needs READ on everything this module manages: VPC, EKS,
+# IAM, KMS, S3, Secrets Manager metadata, CloudWatch. Enumerating those
+# Describe/Get/List actions by hand is a list that silently stops matching the
+# module the next time a resource type is added — and a plan that cannot
+# refresh reports "no changes" for the resources it could not read, which is
+# worse than failing. AWS's managed ReadOnlyAccess is the standard shape for
+# this; it adds no write of any kind to the role's own policy above.
+#
+# Read by terraform-plan-nightly.yml as secrets.AWS_CI_ROLE_ARN (#183).
+resource "aws_iam_role_policy_attachment" "ci_plan_read" {
+  count = var.github_repo != "" ? 1 : 0
+
+  role       = aws_iam_role.ci[0].name
+  policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
+}
+
 resource "aws_iam_role_policy_attachment" "ci" {
   count      = var.github_repo != "" ? 1 : 0
   role       = aws_iam_role.ci[0].name
@@ -456,4 +473,168 @@ output "drift_irsa_role_arns" {
 output "retrain_irsa_role_arns" {
   description = "Map of service name → retrain IRSA role ARN for retrain KSA annotations."
   value       = { for s in var.service_names : s => aws_iam_role.retrain[s].arn }
+}
+
+# ---------------------------------------------------------------------------
+# 5. Drift + retrain, as GitHub Actions identities (#183)
+# ---------------------------------------------------------------------------
+# The roles above named `drift` and `retrain` are IRSA: trusted by the EKS
+# OIDC provider for a ServiceAccount inside the cluster. `drift-detection.yml`
+# and `retrain-service.yml` do not run in the cluster — they run on a GitHub
+# runner — so neither could assume them, and both previously read
+# `AWS_ROLE_ARN`, the per-environment DEPLOY role, which is environment-scoped
+# and reaches a job with no `environment:` as an empty string.
+#
+# Two more roles rather than widening one: a workflow that reads the data
+# bucket should not be able to deploy, and the audit trail should say which of
+# the two touched an object (ADR-017, D-31). Same trust as ci/deploy, which is
+# `local.github_oidc_subs` — main, release branches, tags, and the environment
+# subject a deploy job presents.
+resource "aws_iam_role" "drift_ci" {
+  count = var.github_repo != "" ? 1 : 0
+
+  name = "${var.project_name}-drift-ci-${var.environment}"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Federated = aws_iam_openid_connect_provider.github[0].arn }
+      Action    = "sts:AssumeRoleWithWebIdentity"
+      Condition = {
+        StringEquals = {
+          "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+        }
+        StringLike = {
+          "token.actions.githubusercontent.com:sub" = local.github_oidc_subs
+        }
+      }
+    }]
+  })
+
+  tags = {
+    environment = var.environment
+    managed-by  = "terraform"
+    purpose     = "drift-ci"
+  }
+}
+
+resource "aws_iam_policy" "drift_ci" {
+  count = var.github_repo != "" ? 1 : 0
+
+  name        = "${var.project_name}-drift-ci-policy-${var.environment}"
+  description = "Drift workflow on GitHub Actions: read the data bucket. ADR-017, #183."
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "ReadDataWindows"
+        Effect = "Allow"
+        Action = ["s3:GetObject", "s3:ListBucket"]
+        Resource = concat(
+          [aws_s3_bucket.data.arn],
+          [for name in var.service_names : "${aws_s3_bucket.data.arn}/${name}/*"],
+        )
+      },
+      {
+        Sid      = "S3SseKmsRead"
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt"]
+        Resource = [aws_kms_key.s3.arn]
+      },
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "drift_ci" {
+  count = var.github_repo != "" ? 1 : 0
+
+  role       = aws_iam_role.drift_ci[0].name
+  policy_arn = aws_iam_policy.drift_ci[0].arn
+}
+
+resource "aws_iam_role" "retrain_ci" {
+  count = var.github_repo != "" ? 1 : 0
+
+  name = "${var.project_name}-retrain-ci-${var.environment}"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Federated = aws_iam_openid_connect_provider.github[0].arn }
+      Action    = "sts:AssumeRoleWithWebIdentity"
+      Condition = {
+        StringEquals = {
+          "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+        }
+        StringLike = {
+          "token.actions.githubusercontent.com:sub" = local.github_oidc_subs
+        }
+      }
+    }]
+  })
+
+  tags = {
+    environment = var.environment
+    managed-by  = "terraform"
+    purpose     = "retrain-ci"
+  }
+}
+
+resource "aws_iam_policy" "retrain_ci" {
+  count = var.github_repo != "" ? 1 : 0
+
+  name        = "${var.project_name}-retrain-ci-policy-${var.environment}"
+  description = "Retrain workflow on GitHub Actions: read data, write models. ADR-017, #183."
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "ReadTrainingData"
+        Effect = "Allow"
+        Action = ["s3:GetObject", "s3:ListBucket"]
+        Resource = concat(
+          [aws_s3_bucket.data.arn],
+          [for name in var.service_names : "${aws_s3_bucket.data.arn}/${name}/*"],
+        )
+      },
+      {
+        Sid    = "WriteModelArtifacts"
+        Effect = "Allow"
+        # No s3:DeleteObject: a retrain publishes a new artifact, it does not
+        # remove the one a rollback would need.
+        Action = ["s3:PutObject", "s3:GetObject", "s3:ListBucket"]
+        Resource = concat(
+          [aws_s3_bucket.models.arn],
+          [for name in var.service_names : "${aws_s3_bucket.models.arn}/${name}/*"],
+        )
+      },
+      {
+        Sid      = "S3SseKmsUse"
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt", "kms:GenerateDataKey"]
+        Resource = [aws_kms_key.s3.arn]
+      },
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "retrain_ci" {
+  count = var.github_repo != "" ? 1 : 0
+
+  role       = aws_iam_role.retrain_ci[0].name
+  policy_arn = aws_iam_policy.retrain_ci[0].arn
+}
+
+output "drift_ci_role_arn" {
+  description = "Role ARN for drift-detection.yml — set as the repository secret AWS_DRIFT_ROLE_ARN."
+  value       = var.github_repo != "" ? aws_iam_role.drift_ci[0].arn : ""
+}
+
+output "retrain_ci_role_arn" {
+  description = "Role ARN for retrain-service.yml — set as the repository secret AWS_RETRAIN_ROLE_ARN."
+  value       = var.github_repo != "" ? aws_iam_role.retrain_ci[0].arn : ""
 }

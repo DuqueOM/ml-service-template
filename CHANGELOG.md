@@ -15,6 +15,35 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Added — GitHub Actions has identities Terraform creates and trusts (#183)
+
+- **GCP: Terraform never created the federation at all.** It created the five
+  ADR-017 service accounts and bound three of them to Kubernetes
+  ServiceAccounts, and nothing let GitHub Actions impersonate any of them. The
+  deploy chain worked only because somebody had run `gcp-wif-setup.md` by
+  hand. `infra/terraform/gcp/wif.tf` now creates the Workload Identity pool,
+  the provider — with an `attribute_condition` pinning the repository, without
+  which the pool accepts a token from any repository on github.com — and one
+  `roles/iam.workloadIdentityUser` grant per purpose: ci, deploy, drift,
+  retrain. Gated on the new `github_repo` variable, so an adopter who
+  federates some other way sets it to `""` and gets none of it.
+- **AWS: the drift and retrain roles were IRSA-only.** They are trusted by the
+  EKS cluster's OIDC provider for an in-cluster ServiceAccount, which a GitHub
+  runner cannot use. `drift_ci` and `retrain_ci` are new roles with the same
+  GitHub subject conditions as ci and deploy, and least-privilege policies:
+  drift reads the data bucket, retrain reads data and writes the models prefix
+  with no `s3:DeleteObject`, so a retrain cannot remove the artefact a
+  rollback needs.
+- **The nightly plan could not refresh.** `terraform plan` reads every managed
+  resource before it can diff, and the plan identity had EKS describe, ECR
+  push and state access only. It now carries AWS-managed `ReadOnlyAccess`, and
+  `roles/viewer` on GCP. A plan that cannot read a resource reports "no
+  changes" for it, which is worse than failing.
+- `test_runtime_identity_contract.py` maps every identity input the workflows
+  read to the Terraform identity that backs it, and asserts each exists, trusts
+  GitHub, and pins a subject condition. On the pre-fix tree it fails eight
+  cases, naming each missing role, binding and pool.
+
 ### Fixed — three scheduled workloads had no network path at all (#182)
 
 - `networkpolicy.yaml` grants egress to `app: <service>`, the predictor.

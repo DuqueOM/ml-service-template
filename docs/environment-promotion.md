@@ -103,20 +103,20 @@ reuse the deploy role (ADR-017, D-31).
 | --- | --- | --- | --- |
 | `AWS_ROLE_ARN` | environment: one per `aws-dev`, `aws-staging`, `aws-production` | `deploy-common.yml` deploy job | Terraform output `deploy_role_arn` for that environment |
 | `AWS_BUILD_ROLE_ARN` | repository | `deploy-aws.yml` build job, to push to ECR | Terraform output `ci_role_arn`, or a dedicated build role |
-| `AWS_CI_ROLE_ARN` | repository | `terraform-plan-nightly.yml` | Terraform output `ci_role_arn` |
-| `AWS_DRIFT_ROLE_ARN` | repository | `drift-detection.yml` when `DATA_BUCKET_KIND=s3` | a role with read on the data bucket, trusted for `ref:refs/heads/main` (tracked in #183) |
-| `AWS_RETRAIN_ROLE_ARN` | repository | `retrain-service.yml` when the buckets are `s3` | a role with read on data and write on models, trusted for `ref:refs/heads/main` (tracked in #183) |
+| `AWS_CI_ROLE_ARN` | repository | `terraform-plan-nightly.yml` | Terraform output `ci_role_arn`. That role carries AWS-managed `ReadOnlyAccess` so `plan` can refresh every managed resource; a plan that cannot read reports "no changes" for what it could not see |
+| `AWS_DRIFT_ROLE_ARN` | repository | `drift-detection.yml` when `DATA_BUCKET_KIND=s3` | Terraform output `drift_ci_role_arn` — read on the data bucket, trusted for this repository's GitHub OIDC subjects |
+| `AWS_RETRAIN_ROLE_ARN` | repository | `retrain-service.yml` when the buckets are `s3` | Terraform output `retrain_ci_role_arn` — read on data, write on the models prefix, no delete |
 | `MLFLOW_TRACKING_URI` | repository | `retrain-service.yml` | tracking server URL; a secret because it may embed credentials |
 | `INFRACOST_API_KEY` | repository, optional | `terraform-plan-nightly.yml` | cost breakdown; the step is skipped when absent |
 | `CODECOV_TOKEN` | repository, optional | `ci.yml` | coverage upload |
 
 | Variable | Scope | Read by | Value |
 | --- | --- | --- | --- |
-| `GCP_WIF_PROVIDER` | repository | every workflow that authenticates to GCP | Workload Identity Federation provider resource path |
+| `GCP_WIF_PROVIDER` | repository | every workflow that authenticates to GCP | Terraform output `github_workload_identity_provider`. Terraform creates the pool and provider when `github_repo` is set, with an attribute condition pinning this repository |
 | `GCP_SERVICE_ACCOUNT` | repository | `deploy-gcp.yml` build job, `deploy-common.yml` | Terraform output `deploy_service_account_email` |
-| `GCP_CI_SERVICE_ACCOUNT` | repository | `terraform-plan-nightly.yml` | Terraform output `ci_service_account_email` |
-| `GCP_DRIFT_SERVICE_ACCOUNT` | repository | `drift-detection.yml` when `DATA_BUCKET_KIND=gcs` | a service account with read on the data bucket that the WIF principal can impersonate (tracked in #183) |
-| `GCP_RETRAIN_SERVICE_ACCOUNT` | repository | `retrain-service.yml` when the buckets are `gcs` | a service account with read on data and write on models that the WIF principal can impersonate (tracked in #183) |
+| `GCP_CI_SERVICE_ACCOUNT` | repository | `terraform-plan-nightly.yml` | Terraform output `ci_service_account_email`. That account holds `roles/viewer` so `plan` can refresh |
+| `GCP_DRIFT_SERVICE_ACCOUNT` | repository | `drift-detection.yml` when `DATA_BUCKET_KIND=gcs` | Terraform output `drift_service_account_email`; Terraform also grants this repository's principalSet `roles/iam.workloadIdentityUser` on it |
+| `GCP_RETRAIN_SERVICE_ACCOUNT` | repository | `retrain-service.yml` when the buckets are `gcs` | Terraform output `retrain_service_account_email`, with the same impersonation grant |
 | `GCP_PROJECT_ID` | repository | `deploy-gcp.yml` top-level `env` (registry URL), `terraform-plan-nightly.yml` | the project ID |
 | `GCP_REGION` | repository | GCP workflows | e.g. `us-central1` |
 | `GKE_DEV_CLUSTER`, `GKE_STAGING_CLUSTER`, `GKE_PROD_CLUSTER` | repository | `deploy-gcp.yml` caller jobs | GKE cluster names |

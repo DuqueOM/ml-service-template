@@ -213,6 +213,18 @@ variable "workload_node_taint_value" {
 # overlay tfvars works for both clouds without per-cloud divergence.
 # ----------------------------------------------------------------------
 
+variable "github_repo" {
+  description = <<-EOT
+    GitHub repo (owner/name) whose Actions may impersonate the ci, deploy,
+    drift and retrain service accounts through Workload Identity Federation.
+    Empty = skip the pool, the provider and every impersonation grant, for an
+    adopter who federates some other way or already created a pool by hand.
+    Mirrors AWS variable.github_repo.
+  EOT
+  type        = string
+  default     = ""
+}
+
 variable "service_names" {
   description = <<-EOT
     Logical service names that need per-service Secret Manager entries
