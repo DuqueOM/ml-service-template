@@ -1,0 +1,85 @@
+# NetworkPolicy — egress for the scheduled jobs, which the base policy does not cover.
+#
+# `networkpolicy-deny-default.yaml` selects every pod in the namespace, and
+# `networkpolicy.yaml` grants egress to `app: {@ service_kebab @}` — the
+# predictor. The two CronJobs carry different labels:
+#
+#   cronjob-drift.yaml        app: {@ service_kebab @}-drift
+#   cronjob-performance.yaml  app: {@ service_kebab @}-perf
+#                             app: {@ service_kebab @}-gt   (ground-truth ingester)
+#
+# so on any cluster that enforces NetworkPolicy (GKE Dataplane V2, EKS with the
+# VPC CNI policy agent) neither could resolve DNS, download its window from the
+# data bucket, or push a metric. Both would fail at the init container, daily,
+# and the drift heartbeat alert would fire forever with the cause one layer
+# below where anyone was looking. kind enforces no policies, which is why every
+# lane in this repository stayed green.
+#
+# One policy for all three, selected by label expression: they need the same
+# egress and splitting them would be three files to forget instead of one. The
+# issue that started this named only the drift job; the general check — every
+# workload in `base/` must be selected by a policy that grants egress — found
+# the other two, which is the difference between fixing an instance and fixing
+# the class.
+#
+# OVERLAY-OVERRIDE REQUIRED — cloud storage egress is deliberately absent here,
+# exactly as in `networkpolicy.yaml`: each overlay appends its own rule via
+# `patch-networkpolicy-jobs.yaml` (dev permissive, staging and prod
+# cloud-specific), so a missing patch fails closed rather than opening the
+# namespace. `tests/governance/test_networkpolicy_egress_hygiene.py` fails when
+# an overlay ships one patch and forgets the other.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: "{@ service_kebab @}-jobs-network-policy"
+  labels:
+    app: "{@ service_kebab @}"
+    managed-by: kustomize
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - "{@ service_kebab @}-drift"
+          - "{@ service_kebab @}-perf"
+          - "{@ service_kebab @}-gt"
+  policyTypes:
+    - Egress
+  egress:
+    # DNS. Without this the bucket hostname does not resolve and the init
+    # container fails before any allowlist below matters.
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+    # MLflow tracking server — the performance monitor logs sliced metrics.
+    - to:
+        - podSelector:
+            matchLabels:
+              app: mlflow
+      ports:
+        - protocol: TCP
+          port: 5000
+
+    # Prometheus Pushgateway — how a CronJob publishes a metric at all, since
+    # nothing scrapes a pod that has already exited (D-20, ADR-006).
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+          podSelector:
+            matchLabels:
+              app: pushgateway
+      ports:
+        - protocol: TCP
+          port: 9091
+
+    # Cloud storage: intentionally empty. See the OVERLAY-OVERRIDE banner above.

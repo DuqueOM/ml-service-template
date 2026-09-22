@@ -15,7 +15,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
-*Nothing yet.*
+### Fixed — three scheduled workloads had no network path at all (#182)
+
+- `networkpolicy.yaml` grants egress to `app: <service>`, the predictor.
+  `networkpolicy-deny-default.yaml` selects every pod in the namespace. The
+  three CronJobs carry different labels — `-drift`, `-perf` and `-gt` — so on
+  any cluster that enforces NetworkPolicy none of them could resolve DNS,
+  download its window from the data bucket, or push a metric. They would fail
+  at the init container, daily, with the drift heartbeat alert firing one layer
+  above the cause.
+- `k8s/base/networkpolicy-jobs.yaml` selects all three by label expression and
+  grants DNS, MLflow and Pushgateway egress. Cloud storage stays an
+  overlay-override, exactly as for the predictor, so a missing patch fails
+  closed: every `gcp-*` and `aws-*` overlay now ships
+  `patch-networkpolicy-jobs.yaml` with the same allowlist it already applies to
+  the predictor's policy.
+- **The issue named the drift job. Asking the question for every workload found
+  three.** `test_networkpolicy_egress_hygiene.py` now asserts that every
+  workload in `k8s/base` and in each overlay is selected by some policy that
+  grants egress, rather than checking the one that was reported. On the pre-fix
+  tree it fails 14 cases and names all three CronJobs in every overlay.
+- Two defects in that new control, both found by running it: it read a
+  rationale sentence mentioning `0.0.0.0/0` as a wildcard rule, and it treated
+  a Kustomize patch fragment as a workload with no labels. Both are structural
+  now.
 
 ## [v0.29.0] - 2026-09-21
 

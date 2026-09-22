@@ -1,0 +1,28 @@
+# JSON 6902 patch — cloud storage egress for the scheduled jobs.
+#
+# Same allowlist as `patch-networkpolicy.yaml`, applied to the policy that
+# selects the drift and performance CronJob pods. They download their windows
+# from the same bucket the predictor's init container reads, so the rule is the
+# same; the policy is different because the pods carry different labels.
+- op: add
+  path: /spec/egress/-
+  value:
+    # Private Google Access virtual IPs (fixed by GCP, safe to hardcode):
+    #   199.36.153.4/30 — restricted.googleapis.com
+    #   199.36.153.8/30 — private.googleapis.com
+    to:
+      - ipBlock:
+          cidr: 199.36.153.4/30
+      - ipBlock:
+          cidr: 199.36.153.8/30
+      # Public googleapis range — residual until FQDN policy ships.
+      # Tighter than the base 0.0.0.0/0 (excludes all non-googleapis
+      # public IPs) but still broader than a pure FQDN allowlist.
+      # See R5-M3 follow-up in ACTION_PLAN_R5.md.
+      - ipBlock:
+          cidr: 34.0.0.0/8
+          except:
+            - 34.64.0.0/10       # GCE internal, narrow further if needed
+    ports:
+      - protocol: TCP
+        port: 443

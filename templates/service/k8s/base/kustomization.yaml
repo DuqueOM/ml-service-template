@@ -45,4 +45,5 @@ resources:
   - networkpolicy.yaml
   - networkpolicy-deny-default.yaml
   - networkpolicy-smoke-test.yaml
+  - networkpolicy-jobs.yaml
   - rbac.yaml

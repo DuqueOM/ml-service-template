@@ -282,3 +282,138 @@ def test_dev_overlays_carry_the_permissive_patch(overlay: str) -> None:
         "CIDR; the dev patch must open egress for the init-container "
         "model download."
     )
+
+
+# ---------------------------------------------------------------------------
+# The general control: a workload nobody's policy selects has no egress at all.
+#
+# The issue that prompted this named the drift CronJob. Asking the question for
+# every workload instead found three: `-drift`, `-perf` and `-gt`. The base
+# policy selects `app: <service>` — the predictor — and default-deny covers the
+# rest of the namespace, so each CronJob was launched into a namespace where it
+# could not resolve DNS, reach its bucket or push a metric. Every lane here was
+# green because kind enforces no NetworkPolicy.
+# ---------------------------------------------------------------------------
+WORKLOAD_KINDS = {"Deployment", "CronJob", "Rollout", "StatefulSet", "DaemonSet", "Job"}
+
+
+def _pod_labels(document: dict) -> dict[str, str] | None:
+    spec = document.get("spec") or {}
+    template = spec.get("template")
+    if template is None:
+        job = (spec.get("jobTemplate") or {}).get("spec") or {}
+        template = job.get("template")
+    if template is None:
+        return None
+    labels = ((template.get("metadata") or {}).get("labels")) or {}
+    # A patch fragment carries a name and the fields it overrides, never the pod
+    # labels — treating one as a workload asks which policy selects a document
+    # that never becomes a pod, and answers "none" every time.
+    return labels or None
+
+
+def _selects(selector: dict | None, labels: dict[str, str]) -> bool:
+    if selector is None:
+        return False
+    if selector == {}:
+        return True
+    for key, value in (selector.get("matchLabels") or {}).items():
+        if labels.get(key) != value:
+            return False
+    for expression in selector.get("matchExpressions") or []:
+        operator, key = expression["operator"], expression["key"]
+        values = expression.get("values", [])
+        if operator == "In" and labels.get(key) not in values:
+            return False
+        if operator == "NotIn" and labels.get(key) in values:
+            return False
+        if operator == "Exists" and key not in labels:
+            return False
+        if operator == "DoesNotExist" and key in labels:
+            return False
+    return True
+
+
+def _documents(directory: Path) -> list[dict]:
+    out: list[dict] = []
+    for path in sorted(directory.glob("*.yaml")):
+        for document in yaml.safe_load_all(path.read_text(encoding="utf-8")):
+            if isinstance(document, dict) and document.get("kind"):
+                out.append(document)
+    return out
+
+
+def _egress_policies(documents: list[dict]) -> list[dict]:
+    return [d for d in documents if d["kind"] == "NetworkPolicy" and (d["spec"].get("egress") or [])]
+
+
+def test_every_base_workload_is_selected_by_an_egress_policy() -> None:
+    documents = _documents(BASE_NETPOL.parent)
+    policies = _egress_policies(documents)
+    assert policies, "base ships no NetworkPolicy that grants egress at all"
+
+    uncovered = []
+    for document in documents:
+        if document["kind"] not in WORKLOAD_KINDS:
+            continue
+        labels = _pod_labels(document)
+        if labels is None:
+            continue
+        if not any(_selects(p["spec"].get("podSelector"), labels) for p in policies):
+            uncovered.append(f"{document['kind']} {document['metadata']['name']} (labels: {labels})")
+
+    assert not uncovered, (
+        "these workloads are selected by no egress policy, so default-deny leaves them without "
+        "DNS, bucket access or a way to push a metric — and it fails at the init container, "
+        "daily, one layer below where anyone looks:\n  " + "\n  ".join(uncovered)
+    )
+
+
+@pytest.mark.parametrize("overlay", _discover_overlays())
+def test_every_overlay_workload_is_selected_by_an_egress_policy(overlay: str) -> None:
+    """An overlay that adds a workload must add or extend a policy that covers it."""
+    documents = _documents(BASE_NETPOL.parent) + _documents(OVERLAY_ROOT / overlay)
+    policies = _egress_policies(documents)
+    uncovered = []
+    for document in documents:
+        if document["kind"] not in WORKLOAD_KINDS:
+            continue
+        labels = _pod_labels(document)
+        if labels is None:
+            continue
+        if not any(_selects(p["spec"].get("podSelector"), labels) for p in policies):
+            uncovered.append(f"{document['kind']} {document['metadata']['name']}")
+    assert not uncovered, f"{overlay}: no egress policy selects " + ", ".join(uncovered)
+
+
+@pytest.mark.parametrize("overlay", [o for o in _discover_overlays() if "-" in o and not o.startswith("batch")])
+def test_overlay_patches_the_jobs_policy_too(overlay: str) -> None:
+    """Two policies need cloud egress, so an overlay that patches one and forgets the other fails closed."""
+    directory = OVERLAY_ROOT / overlay
+    patch = directory / "patch-networkpolicy-jobs.yaml"
+    assert patch.is_file(), (
+        f"{overlay} ships patch-networkpolicy.yaml but no patch-networkpolicy-jobs.yaml: the CronJobs "
+        "would have DNS and the Pushgateway, and no route to the bucket they download their window from"
+    )
+    kustomization = yaml.safe_load((directory / "kustomization.yaml").read_text(encoding="utf-8"))
+    targets = [
+        p.get("target", {}).get("name", "")
+        for p in kustomization.get("patches", [])
+        if p.get("path") == "patch-networkpolicy-jobs.yaml"
+    ]
+    assert any(name.endswith("-jobs-network-policy") for name in targets), (
+        f"{overlay}: patch-networkpolicy-jobs.yaml is not wired to the jobs policy (targets: {targets})"
+    )
+    if overlay.endswith("-dev"):
+        return
+    # Structural, not textual: gcp-staging's rationale mentions 0.0.0.0/0 to say
+    # its rule is tighter than the base used to be. A substring check reads that
+    # sentence as a wildcard rule and sends the reader to edit a comment.
+    operations = yaml.safe_load(patch.read_text(encoding="utf-8")) or []
+    cidrs = [
+        peer["ipBlock"]["cidr"]
+        for op in operations
+        for peer in (op.get("value", {}).get("to") or [])
+        if "ipBlock" in peer
+    ]
+    assert "0.0.0.0/0" not in cidrs, f"{overlay}: wildcard egress outside dev ({cidrs})"
