@@ -402,3 +402,93 @@ def test_aws_github_oidc_trusts_the_environments_deploy_jobs_run_in() -> None:
         assert expected in rendered, (
             f"no Terraform OIDC subject matches the {environment} deploy job ({expected}): {sorted(rendered)}"
         )
+
+
+# ---------------------------------------------------------------------------
+# 6. Every identity a workflow reads exists in Terraform, trusted for GitHub
+#
+# The deploy chain worked because somebody had run `gcp-wif-setup.md` by hand:
+# Terraform created the five ADR-017 service accounts and bound three of them
+# to Kubernetes ServiceAccounts, and nothing let GitHub Actions impersonate
+# any of them. The three scheduled workflows had no identity at all — they read
+# `AWS_ROLE_ARN`, the per-environment deploy role, from jobs with no
+# `environment:`, where it arrives empty.
+#
+# The mapping below IS the contract: a workflow input on the left, the
+# Terraform identity that backs it on the right. It is written out rather than
+# derived because the derivation would have to guess which of five identities
+# a name refers to, and a guess that is wrong reports the wrong thing.
+# ---------------------------------------------------------------------------
+AWS_IDENTITIES = {
+    "AWS_ROLE_ARN": "deploy",
+    "AWS_BUILD_ROLE_ARN": "ci",
+    "AWS_CI_ROLE_ARN": "ci",
+    "AWS_DRIFT_ROLE_ARN": "drift_ci",
+    "AWS_RETRAIN_ROLE_ARN": "retrain_ci",
+}
+GCP_IDENTITIES = {
+    "GCP_SERVICE_ACCOUNT": "deploy",
+    "GCP_CI_SERVICE_ACCOUNT": "ci",
+    "GCP_DRIFT_SERVICE_ACCOUNT": "drift",
+    "GCP_RETRAIN_SERVICE_ACCOUNT": "retrain",
+}
+
+
+def _workflow_text() -> str:
+    return "\n".join(p.read_text(encoding="utf-8") for p in sorted(WORKFLOWS.glob("*.yml")))
+
+
+def test_the_mapping_covers_every_identity_the_workflows_read() -> None:
+    """A new identity input with no entry here would otherwise pass unchecked."""
+    text = _workflow_text()
+    read_aws = set(re.findall(r"secrets\.(AWS_[A-Z_]*ROLE_ARN)\b", text))
+    read_gcp = set(re.findall(r"vars\.(GCP_[A-Z_]*SERVICE_ACCOUNT)\b", text))
+    assert read_aws and read_gcp, "no identity inputs found; the patterns stopped matching"
+    assert read_aws <= set(AWS_IDENTITIES), f"unmapped AWS identity inputs: {sorted(read_aws - set(AWS_IDENTITIES))}"
+    assert read_gcp <= set(GCP_IDENTITIES), f"unmapped GCP identity inputs: {sorted(read_gcp - set(GCP_IDENTITIES))}"
+
+
+@pytest.mark.parametrize(("value", "resource"), sorted(AWS_IDENTITIES.items()), ids=sorted(AWS_IDENTITIES))
+def test_aws_identity_exists_and_trusts_github(value: str, resource: str) -> None:
+    text = _tf_text("aws")
+    block = _resource(text, "aws_iam_role", resource)
+    assert "aws_iam_openid_connect_provider.github" in block, (
+        f"{value} maps to aws_iam_role.{resource}, which does not trust the GitHub OIDC provider. "
+        "A workflow cannot assume a role trusted only by the EKS cluster's provider: that is the IRSA "
+        "path, for a pod, not for a runner."
+    )
+    assert "local.github_oidc_subs" in block, (
+        f"aws_iam_role.{resource} trusts GitHub but pins no `sub` condition, so any workflow in any "
+        "repository using this provider could assume it"
+    )
+
+
+@pytest.mark.parametrize(("value", "resource"), sorted(GCP_IDENTITIES.items()), ids=sorted(GCP_IDENTITIES))
+def test_gcp_identity_exists_and_github_may_impersonate_it(value: str, resource: str) -> None:
+    text = _tf_text("gcp")
+    _resource(text, "google_service_account", resource)  # raises if the SA is missing
+    binding = _resource(text, "google_service_account_iam_member", f"github_impersonates_{resource}")
+    assert "roles/iam.workloadIdentityUser" in binding and "local.github_principal" in binding, (
+        f"{value} maps to google_service_account.{resource}, which GitHub Actions cannot impersonate: "
+        "the workloadIdentityUser binding for the repository's principalSet is missing"
+    )
+
+
+def test_the_gcp_pool_is_restricted_to_this_repository() -> None:
+    """Without an attribute condition the pool accepts a token from any repository on github.com."""
+    text = _tf_text("gcp")
+    provider = _resource(text, "google_iam_workload_identity_pool_provider", "github")
+    assert "attribute_condition" in provider and "assertion.repository" in provider, (
+        "the WIF provider has no attribute condition pinning the repository"
+    )
+    assert "token.actions.githubusercontent.com" in provider, "the provider does not name GitHub's issuer"
+
+
+def test_the_plan_identity_can_refresh_state() -> None:
+    """`terraform plan` refreshes every managed resource; without read it reports no changes for what it cannot see."""
+    assert "ReadOnlyAccess" in _resource(_tf_text("aws"), "aws_iam_role_policy_attachment", "ci_plan_read"), (
+        "the AWS plan identity has no account-wide read, so the nightly plan silently under-reports drift"
+    )
+    assert "roles/viewer" in _resource(_tf_text("gcp"), "google_project_iam_member", "ci_plan_viewer"), (
+        "the GCP plan identity has no project-wide read, with the same consequence"
+    )

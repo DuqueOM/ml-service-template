@@ -177,6 +177,9 @@ listed at all.
 | -------- | ------- | ------- | --------- |
 | `AWS_ROLE_ARN` | environment: one per `aws-dev`, `aws-staging`, `aws-production` | `arn:aws:iam::${ACCOUNT_ID}:role/${CI_ROLE_NAME}` | the **deploy** jobs, via `deploy-common.yml`'s `workflow_call` secrets contract |
 | `AWS_BUILD_ROLE_ARN` | repository | `arn:aws:iam::${ACCOUNT_ID}:role/${BUILD_ROLE_NAME}` | the **build** job, to push to ECR |
+| `AWS_CI_ROLE_ARN` | repository | Terraform output `ci_role_arn` | `terraform-plan-nightly.yml`; carries `ReadOnlyAccess` so `plan` can refresh |
+| `AWS_DRIFT_ROLE_ARN` | repository | Terraform output `drift_ci_role_arn` | `drift-detection.yml` on S3 data |
+| `AWS_RETRAIN_ROLE_ARN` | repository | Terraform output `retrain_ci_role_arn` | `retrain-service.yml` on S3 data and models |
 
 Two roles rather than one is deliberate — ADR-017 / D-31, per-purpose
 identities. The build role needs ECR push and nothing else; the deploy role
