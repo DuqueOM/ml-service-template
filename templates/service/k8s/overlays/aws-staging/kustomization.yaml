@@ -34,3 +34,7 @@ patches:
     target:
       kind: NetworkPolicy
       name: "{@ service_kebab @}-network-policy"
+  - path: patch-networkpolicy-jobs.yaml
+    target:
+      kind: NetworkPolicy
+      name: "{@ service_kebab @}-jobs-network-policy"

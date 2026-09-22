@@ -1,0 +1,19 @@
+# JSON 6902 patch — cloud storage egress for the scheduled jobs.
+#
+# Same allowlist as `patch-networkpolicy.yaml`, applied to the policy that
+# selects the drift and performance CronJob pods. They download their windows
+# from the same bucket the predictor's init container reads, so the rule is the
+# same; the policy is different because the pods carry different labels.
+- op: add
+  path: /spec/egress/-
+  value:
+    to:
+      - ipBlock:
+          cidr: 0.0.0.0/0
+          except:
+            - 10.0.0.0/8
+            - 172.16.0.0/12
+            - 192.168.0.0/16
+    ports:
+      - protocol: TCP
+        port: 443
