@@ -36,7 +36,7 @@ flowchart TD
     G --> H["cosign attest the SBOM, by digest"]
     F --> I["deploy-common.yml, one reusable job per environment"]
     H --> I
-    I --> J["GitHub Environment protection<br/>dev auto, staging 1 reviewer, prod 2 reviewers and tag-only"]
+    I --> J["GitHub Environment protection<br/>dev auto, staging and prod gated, prod tag-only"]
     J --> K["risk_context pre-check<br/>live signals can escalate the mode to STOP and abort"]
     K --> L["kustomize pins the overlay image to that digest"]
     L --> M["kubectl apply -k on the target overlay"]
@@ -46,7 +46,17 @@ flowchart TD
     P --> Q["audit entry appended to ops/audit.jsonl"]
 ```
 
-Two steps in that chain exist because the obvious version of them failed:
+Two nodes are the adopter's to wire, and the diagram would be dishonest
+without saying so. **Reviewer counts** live in GitHub's Environment settings,
+not in the repository: the workflow declares the environment and names the
+intended posture (dev automatic, staging one reviewer, production two plus a
+wait timer), and an adopter who never configures those environments gets no
+approval step. The **tag-only gate on production** is enforced in the
+repository, twice — once as a job condition and once as a guard inside the
+deploy job. **Kyverno** admits nothing until its policies are installed in the
+cluster; they ship in `templates/k8s/policies/`.
+
+Two other steps exist because the obvious version of them failed:
 
 - **The digest pin.** Building, signing and then deploying a *tag* leaves a
   window in which the tag can point somewhere else. The build job emits a
