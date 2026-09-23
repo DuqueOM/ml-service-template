@@ -245,6 +245,7 @@ swap, overlay patch rename, verification steps, failure paths).
 
 | If you want to... | Read first | Then |
 | ------------------- | ------------ | ------ |
+| See how it works before reading it | [docs/DIAGRAMS.md](docs/DIAGRAMS.md) | [QUICK_START.md](QUICK_START.md) |
 | Orient yourself — Day 1 to Month 2 | [docs/PROGRESSION.md](docs/PROGRESSION.md) | [QUICK_START.md](QUICK_START.md) |
 | Scaffold a new ML service | [QUICK_START.md](QUICK_START.md) | `copier copy` or `./templates/scripts/new-service.sh` |
 | Follow the narrated tutorial | [docs/TUTORIAL.md](docs/TUTORIAL.md) | [QUICK_START.md](QUICK_START.md) |
@@ -277,6 +278,11 @@ flowchart TD
     E --> K
     K --> L["Agentic Recall for CI, Deploy, Incident, Retrain"]
 ```
+
+Four diagrams take this apart step by step — the deploy chain and how it
+stays verifiable, how identity and secrets resolve without a stored
+credential, how the monitoring loop closes, and what governs the agentic
+surface: [docs/DIAGRAMS.md](docs/DIAGRAMS.md).
 
 ### Design principles
 
