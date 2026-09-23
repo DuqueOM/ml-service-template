@@ -215,11 +215,49 @@ def check_anti_pattern_count() -> list[str]:
 _SURFACE_CLAIM = re.compile(r"(\d+)\s*rules\s*\+\s*(\d+)\s*skills\s*\+\s*(\d+)\s*workflows")
 
 
-def _reconcile_surface(claude_path: Path, rules_dir: Path, label: str) -> list[str]:
-    """Compare one CLAUDE.md's surface claim against the tree beside it."""
-    claude = _read(claude_path)
-    if claude is None or not rules_dir.is_dir():
-        return []  # no agentic surface / no CLAUDE.md here → nothing to reconcile
+# Directories whose files are records of a past state, not claims about the
+# current one. An ADR quotes the drift it was written to fix — ADR-031 still
+# reads "15 rules + 16 skills + 12 workflows" because that is what the repo
+# looked like when the coherence system was proposed, and rewriting it to
+# today's numbers would falsify the record. Incident and audit write-ups are
+# dated the same way. Everything else under `docs/` and at the repository
+# root describes the tree as it is now, and is reconciled.
+_RECORD_DIRS = ("decisions", "audit", "incidents")
+
+# The same reasoning at the repository root. These three are append-only
+# histories: a CHANGELOG entry describes the release it belongs to, and the
+# v0.24.0 entry legitimately still reads "18 rules + 26 skills + 18
+# workflows" because it is reporting the drift that release fixed.
+_RECORD_FILES = ("CHANGELOG.md", "MIGRATION.md", "VALIDATION_LOG.md")
+
+
+def _states_current_surface(path: Path, root: Path) -> bool:
+    """True when `path` is a live document rather than a dated record."""
+    try:
+        rel = path.relative_to(root)
+    except ValueError:
+        return False
+    if len(rel.parts) == 1:
+        return rel.name not in _RECORD_FILES
+    return not (rel.parts[0] == "docs" and rel.parts[1] in _RECORD_DIRS)
+
+
+def _surface_claim_docs(root: Path) -> list[Path]:
+    """Every live document under `root` that could restate the surface counts."""
+    candidates = sorted(root.glob("*.md")) + sorted((root / "docs").rglob("*.md"))
+    return [p for p in candidates if p.is_file() and _states_current_surface(p, root)]
+
+
+def _reconcile_surface(doc_path: Path, rules_dir: Path, label: str) -> list[str]:
+    """Compare every surface claim in one document against the tree beside it.
+
+    The claim is reconciled wherever it appears, not only the first time:
+    a document that states the counts in a summary table and again in prose
+    can otherwise keep a stale copy below a corrected one.
+    """
+    doc = _read(doc_path)
+    if doc is None or not rules_dir.is_dir():
+        return []  # no agentic surface / no document here → nothing to reconcile
 
     skills_dir = rules_dir.parent / "skills"
     workflows_dir = rules_dir.parent / "workflows"
@@ -229,16 +267,17 @@ def _reconcile_surface(claude_path: Path, rules_dir: Path, label: str) -> list[s
         len(list(workflows_dir.glob("*.md"))) if workflows_dir.is_dir() else 0,
     )
 
-    m = _SURFACE_CLAIM.search(claude)
-    if not m:
-        return []  # doesn't claim a surface count → nothing to verify
-    claimed = (int(m.group(1)), int(m.group(2)), int(m.group(3)))
-    if claimed != actual:
-        return [
-            f"{label} claims {claimed[0]} rules + {claimed[1]} skills + {claimed[2]} workflows; "
-            f"the surface beside it has {actual[0]} rules + {actual[1]} skills + {actual[2]} workflows."
-        ]
-    return []
+    problems = []
+    for m in _SURFACE_CLAIM.finditer(doc):
+        claimed = (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        if claimed != actual:
+            line = doc.count("\n", 0, m.start()) + 1
+            problems.append(
+                f"{label}:{line} claims {claimed[0]} rules + {claimed[1]} skills + "
+                f"{claimed[2]} workflows; the surface beside it has "
+                f"{actual[0]} rules + {actual[1]} skills + {actual[2]} workflows."
+            )
+    return problems
 
 
 def _count_surface_units(directory: Path) -> int:
@@ -292,24 +331,32 @@ def _reconcile_adapter_block(doc_path: Path, root: Path, label: str) -> list[str
 
 
 def check_surface_counts() -> list[str]:
-    """C4 — live agentic surface counts must match CLAUDE.md's claim.
+    """C4 — live agentic surface counts must match every document that states them.
 
-    Two CLAUDE.md files carry a surface claim, and only one of them used to
-    be checked. ``templates/service/CLAUDE.md`` ships into every scaffolded
-    service; inside that service this same script reconciles it correctly,
-    but by then it has already shipped. It sat at "18 rules + 26 skills +
-    18 workflows" against a live 19/27/20 because in the template repo
-    nothing looked at it. Both are reconciled here, each against the
-    surface that sits beside it.
+    This check has been widened twice by the same failure. It started as a
+    single reconciliation of the root ``CLAUDE.md``. Then
+    ``templates/service/CLAUDE.md`` — which ships into every scaffolded
+    service — was found sitting at "18 rules + 26 skills + 18 workflows"
+    against a live 19/27/20, because inside a generated service this script
+    reconciles it correctly but by then it has already shipped. Then
+    ``README.md`` was found stale for the same reason: nothing looked at it.
+
+    Naming the files one at a time is what produced both misses, so the
+    check no longer does. It sweeps every live document at the repository
+    root and under ``docs/`` — in this repository and in the payload — and
+    reconciles each surface claim it finds. A new document that states the
+    counts is covered the day it is written, without anyone remembering to
+    add it here. Dated records are excluded and the reason is in
+    ``_RECORD_DIRS``.
     """
-    problems = _reconcile_surface(CLAUDE, RULES_DIR, "CLAUDE.md")
-    # README.md states the same surface for adopters and was never reconciled:
-    # it claimed 18 rules / 26 skills / 18 workflows against a live 19/27/20.
-    problems += _reconcile_surface(REPO_ROOT / "README.md", RULES_DIR, "README.md")
     service_root = REPO_ROOT / "templates" / "service"
-    service_claude = service_root / "CLAUDE.md"
     service_rules = service_root / "agentic" / "rules"
-    problems += _reconcile_surface(service_claude, service_rules, "templates/service/CLAUDE.md")
+
+    problems: list[str] = []
+    for doc in _surface_claim_docs(REPO_ROOT):
+        problems += _reconcile_surface(doc, RULES_DIR, str(doc.relative_to(REPO_ROOT)))
+    for doc in _surface_claim_docs(service_root):
+        problems += _reconcile_surface(doc, service_rules, str(doc.relative_to(REPO_ROOT)))
 
     # AGENTS.md documents the same surfaces as a directory tree with a count
     # per adapter, and nothing checked those: all nine were stale.
