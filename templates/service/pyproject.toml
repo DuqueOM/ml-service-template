@@ -57,7 +57,7 @@ dependencies = [
 # (ADR-047, ADR-049).
 train = [
     "mlflow ~= 3.16.1",       # ADR-047
-    "skops ~= 0.14.0",        # MLflow 3.x sklearn serialiser; imported by train.py
+    "skops ~= 0.15.0",        # MLflow 3.x sklearn serialiser; imported by train.py
     "optuna ~= 5.0.0",
     # "imbalanced-learn ~= 0.12.0",  # optional: SMOTE / undersampling
 ]
