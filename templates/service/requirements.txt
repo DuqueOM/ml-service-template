@@ -21,7 +21,7 @@ scikit-learn         ~= 1.9.1
 pandas               ~= 2.3.3
 numpy                ~= 1.26.0    # numpy 2.x silently corrupts joblib models
 scipy                ~= 1.17.1    # champion/challenger significance tests
-joblib               ~= 1.4.0
+joblib               ~= 1.6.0
 
 # Serving
 fastapi              ~= 0.141.1
