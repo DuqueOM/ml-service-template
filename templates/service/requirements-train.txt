@@ -18,7 +18,7 @@
 -r requirements.txt
 
 mlflow               ~= 3.16.1    # experiment tracking + model registry (ADR-047)
-skops                ~= 0.14.0    # MLflow 3.x's default sklearn serialiser.
+skops                ~= 0.15.0    # MLflow 3.x's default sklearn serialiser.
                                   # Declared explicitly because train.py imports
                                   # it directly to derive skops_trusted_types:
                                   # an arriving-transitively dependency that
