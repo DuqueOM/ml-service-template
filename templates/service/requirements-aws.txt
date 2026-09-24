@@ -3,4 +3,4 @@
 # Installed on top of requirements.txt ONLY when the image is built with
 # `--build-arg CLOUD_PROVIDER=aws`, which deploy-aws.yml does. See
 # requirements-gcp.txt for why this is not in requirements.txt.
-boto3 ~= 1.43.97
+boto3 ~= 1.43.99
