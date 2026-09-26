@@ -282,6 +282,74 @@ def _validate_domain_enum(manifest: dict) -> list[str]:
     return errors
 
 
+# Where each tool discovers skills, from its own documentation (checked
+# 2026-09-26). Deliberately NOT read from the manifest: the checks below
+# compare the rendered surface with the manifest, so a manifest naming a
+# directory the tool never reads passed them by construction. Cursor and
+# Codex received flat pointers that neither loaded, with this validator green
+# (ADR-027 §9).
+#   Claude Code  https://code.claude.com/docs/en/skills           .claude/skills/<id>/SKILL.md
+#   Cursor       https://cursor.com/docs/skills                    .cursor/skills/ or .agents/skills/<id>/SKILL.md
+#   Codex        https://learn.chatgpt.com/docs/build-skills       .agents/skills/<id>/SKILL.md, nothing else
+SKILL_DISCOVERY_ROOTS: dict[str, tuple[str, ...]] = {
+    "claude": (".claude/skills",),
+    "cursor": (".cursor/skills", ".agents/skills"),
+    "codex": (".agents/skills",),
+}
+LEGACY_SKILL_ROOTS = (".cursor/skills", ".codex/skills")
+
+
+def _validate_skill_discovery(manifest: dict) -> list[str]:
+    """Each pointer surface publishes skills where its tool looks, and nowhere stale.
+
+    A pointer surface with no discovery entry is an error too, so a new tool
+    cannot arrive with its discovery unverified.
+    """
+    errors: list[str] = []
+    surfaces = manifest.get("surfaces") or {}
+    indexes = {
+        REPO_ROOT / (spec.get("roots") or {})["skills_index"]
+        for spec in surfaces.values()
+        if "skills_index" in (spec.get("roots") or {})
+    }
+    flat_reported: set[Path] = set()
+    for surface, spec in sorted(surfaces.items()):
+        if _surface_kind(spec) != "pointer":
+            continue
+        root = (spec.get("roots") or {}).get("skills")
+        if not root:
+            continue
+        readable = SKILL_DISCOVERY_ROOTS.get(surface)
+        if readable is None:
+            errors.append(f"surfaces.{surface}: no skill discovery contract recorded — add the tool's layout")
+            continue
+        if root.rstrip("/") not in readable:
+            errors.append(
+                f"surfaces.{surface}.roots.skills={root!r} is not a directory {surface} reads skills from "
+                f"({', '.join(readable)})"
+            )
+        # A flat file beside the `<id>/` directories is never loaded. Checked
+        # here because a stale `<id>/SKILL.md` from an earlier render would
+        # otherwise satisfy every pointer check while a fresh render — a new
+        # service — gets only the flat files.
+        for flat in sorted((REPO_ROOT / root).glob("*.md")):
+            if flat in indexes or flat in flat_reported:
+                continue
+            flat_reported.add(flat)
+            errors.append(
+                f"{flat.relative_to(REPO_ROOT)}: a flat file in a skills root; {surface} loads only <id>/SKILL.md"
+            )
+    for legacy in LEGACY_SKILL_ROOTS:
+        for flat in sorted((REPO_ROOT / legacy).glob("*.md")):
+            body = flat.read_text(encoding="utf-8")
+            if "**Canonical source**: `agentic/skills/" in body or "Skills Index" in body:
+                errors.append(
+                    f"{flat.relative_to(REPO_ROOT)}: a flat skill pointer from the old layout no tool loads "
+                    "(run sync_agentic_adapters.py, which removes it)"
+                )
+    return errors
+
+
 def _adapter_path(surface: str, roots: dict, bucket: str, item_id: str) -> Path | None:
     """Return the expected adapter pointer path for a surface item."""
     if bucket == "rules":
@@ -294,9 +362,10 @@ def _adapter_path(surface: str, roots: dict, bucket: str, item_id: str) -> Path 
         root = roots.get("skills")
         if not root:
             return None
-        # Claude Code only discovers skills laid out as <id>/SKILL.md with
-        # frontmatter; the pointer adopts that layout (still zero policy text).
-        if surface == "claude":
+        # Claude Code, Cursor and Codex only discover skills laid out as
+        # <id>/SKILL.md with frontmatter; the pointer adopts that layout
+        # (still zero policy text).
+        if surface in SKILL_DISCOVERY_ROOTS:
             return REPO_ROOT / root / item_id / "SKILL.md"
         return REPO_ROOT / root / f"{item_id}.md"
     if bucket == "workflows":
@@ -406,19 +475,21 @@ def _validate_adapter_pointers(manifest: dict) -> list[str]:
                 # Loadability (R6 audit S2-1): pointer EXISTENCE does not
                 # prove the IDE can LOAD it — the claude surface shipped
                 # invisible flat skills for months because only existence
-                # was checked. Assert the discoverable-format contract.
-                if surface == "claude" and bucket == "skills":
-                    errors.extend(_claude_skill_loadability(path, item_id, body))
+                # was checked. Assert the discoverable-format contract, on every
+                # surface whose tool discovers skills — Cursor and Codex then
+                # shipped the same flat layout, unloaded, for the same reason.
+                if surface in SKILL_DISCOVERY_ROOTS and bucket == "skills":
+                    errors.extend(_skill_loadability(surface, path, item_id, body))
     return errors
 
 
-def _claude_skill_loadability(path: Path, item_id: str, body: str) -> list[str]:
-    """Claude Code only loads `<id>/SKILL.md` whose YAML frontmatter
-    parses and carries a `name` matching the directory plus a non-empty
-    `description` (<= 1024 chars, the listing truncation budget)."""
+def _skill_loadability(surface: str, path: Path, item_id: str, body: str) -> list[str]:
+    """Claude Code, Cursor and Codex only load `<id>/SKILL.md` whose YAML
+    frontmatter parses and carries a `name` matching the directory plus a
+    non-empty `description` (<= 1024 chars, the Agent Skills limit)."""
     rel = path.relative_to(REPO_ROOT)
     if not body.startswith("---"):
-        return [f"skills:{item_id}: {rel} missing YAML frontmatter (Claude Code will not load it)"]
+        return [f"skills:{item_id}: {rel} missing YAML frontmatter ({surface} will not load it)"]
     parts = body.split("---", 2)
     if len(parts) < 3:
         return [f"skills:{item_id}: {rel} frontmatter is not closed with `---`"]
@@ -628,6 +699,7 @@ def run(strict: bool) -> dict:
     results["source_paths"] = _validate_source_paths(manifest)
     results["surface_roots"] = _validate_surface_roots(manifest)
     results["adapter_pointers"] = _validate_adapter_pointers(manifest)
+    results["skill_discovery"] = _validate_skill_discovery(manifest)
     results["mode_enum"] = _validate_mode_enum(manifest)
     results["domain_enum"] = _validate_domain_enum(manifest)
     results["context_examples"] = validate_context_examples(strict=strict)

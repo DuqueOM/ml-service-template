@@ -283,10 +283,10 @@ def _reconcile_surface(doc_path: Path, rules_dir: Path, label: str) -> list[str]
 def _count_surface_units(directory: Path) -> int:
     """How many rules / skills / workflows an adapter directory holds.
 
-    Adapters do not share a shape: `.claude/skills/` and `.devin/skills/` use
-    one directory per skill, `.cursor/skills/` and `.codex/skills/` use one
-    file each, and two of the four also carry an `INDEX.md` that is not a
-    skill. Counting entries naively gives 28 for one adapter and 27 for the
+    Adapters do not share a shape: `.claude/skills/`, `.agents/skills/` (shared
+    by Cursor and Codex, ADR-027 §9) and `.devin/skills/` use one directory per
+    skill, rules and commands use one file each, and two of them also carry an
+    `INDEX.md` that is not a skill. Counting entries naively gives 28 for one adapter and 27 for the
     next, which is how the numbers in AGENTS.md drifted apart in the first
     place.
     """

@@ -59,7 +59,7 @@ surfaces:
     config_targets:
       rules: ".cursor/rules/"
       commands: ".cursor/commands/"
-      skills_index: ".cursor/skills/INDEX.md"
+      skills_index: ".agents/skills/INDEX.md"
       mcp_config: "~/.cursor/mcp.json"
 
   claude:
@@ -86,7 +86,7 @@ surfaces:
       - "automations"
     config_targets:
       agents_md: "AGENTS.md"
-      skills: ".codex/skills/"
+      skills: ".agents/skills/"
       automations: ".codex/automations/"
       mcp_config: ".codex/mcp.json"
       mcp_example: ".codex/mcp.example.json"

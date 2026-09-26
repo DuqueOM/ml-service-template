@@ -15,6 +15,52 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Fixed — Cursor and Codex discovered none of the skills (ADR-027 §9)
+
+- **Only the Claude surface used the layout skill tools load.** Cursor received
+  flat `.cursor/skills/<id>.md` pointers and Codex flat `.codex/skills/<id>.md`
+  pointers, in a directory Codex never reads. Both tools load a skill only as
+  `<root>/<id>/SKILL.md` with `name` and `description` front-matter. Neither
+  listed any of the 27 skills, here or in any scaffolded service. The audit-R6
+  fix had made Claude's pointers loadable and never asked about the other two.
+- **Rendered where each tool looks.** Cursor and Codex share `.agents/skills/`,
+  the open Agent Skills directory both read and the only one Codex reads in a
+  repository. A second copy under `.cursor/skills/` would list every skill twice
+  in Cursor. The renderer now handles skills one root at a time, so a shared
+  root is written and pruned once and each pointer names every surface that
+  reads it. Rendered per surface, one pass pruned what only the other listed,
+  and `--check` would never have settled.
+- **Why `--strict` stayed green: it checked the files against the manifest,
+  and the manifest named the wrong places.** `validate_agentic_manifest.py`
+  gains `skill_discovery`, which uses a table of each tool's documented roots
+  kept apart from the manifest. It fails:
+  - a surface whose skills root its tool does not read;
+  - a pointer surface with no recorded contract;
+  - a flat file in a skills root;
+  - a generated pointer left at the old layout.
+
+  Loadability now applies to Cursor and Codex too.
+- **Migration is automatic.** The renderer removes the flat pointers it
+  generated, recognising them by the canonical source they name, and leaves
+  hand-written files alone. See `MIGRATION.md`.
+- **Watched failing.** Eleven mutations, each killed:
+  - three regressions of the layout, caught by the gate CI runs — the original
+    defect among them;
+  - eight weakenings of the validator and renderer, caught by
+    `test_skill_discovery_contract.py`.
+
+  The first run found three survivors. The original defect passed the gate
+  because stale `<id>/SKILL.md` directories from the previous render satisfied
+  every pointer check, so flat files in a skills root are now an error. Two
+  checks were tested only by calling them directly, so integration tests now
+  go through `run()` and the pointer walk.
+- `check_doc_path_refs`' scope floor is lowered from 590 to 586, as a
+  recorded decision: 55 duplicate pointers became 28 shared files, and the
+  scan still reads every tracked markdown file. `.agents/` joins the
+  surfaces that read from either root.
+- The same defect was found downstream first, in ml-platform's QA-4 round
+  twelve.
+
 ### Added — GitHub Actions has identities Terraform creates and trusts (#183)
 
 - **GCP: Terraform never created the federation at all.** It created the five

@@ -121,10 +121,12 @@ FROZEN_PREFIXES = (
 FROZEN_FILES = {"CHANGELOG.md", "VALIDATION_LOG.md"}
 
 # Surfaces that ship into a generated service, and so read correctly from
-# either root. `.devin/`, `.cursor/`, `.claude/`, `.codex/` are generated
-# from `agentic/` by sync_agentic_adapters.py and inherit its perspective.
+# either root. `.devin/`, `.cursor/`, `.claude/`, `.codex/` and `.agents/`
+# (the skills Cursor and Codex share, ADR-027 §9) are generated from
+# `agentic/` by sync_agentic_adapters.py and inherit its perspective.
 DUAL_PREFIXES = (
     "agentic/",
+    ".agents/",
     ".devin/",
     ".cursor/",
     ".claude/",

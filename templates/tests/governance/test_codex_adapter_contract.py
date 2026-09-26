@@ -5,15 +5,18 @@ Authority: `docs/decisions/ADR-023-agentic-portability-and-context.md`.
 Locks the structural invariants that distinguish "adapter" from "fork":
 
 Skill pointers, never copies
-  Each `.codex/{rules,skills,workflows}/<id>.md` MUST reference its
-  canonical `agentic/` source. Without this rule the Codex directory
+  Each `.codex/{rules,workflows}/<id>.md` and each skill pointer
+  `.agents/skills/<id>/SKILL.md` MUST reference its canonical `agentic/`
+  source. Skills live in `.agents/skills/` because it is the only place
+  Codex discovers them in a repository (ADR-027 §9); the directory is
+  shared with Cursor. Without this rule the Codex directory
   drifts into a parallel agentic surface with no propagation contract.
 
 Manifest declares the pointer
   Every skill listed in `agentic_manifest.yaml` with `codex` in
-  `surfaces:` MUST have a matching pointer file in `.codex/skills/`.
-  Reverse: every file in `.codex/skills/` MUST be listed in the
-  manifest with `codex` in `surfaces:`.
+  `surfaces:` MUST have a matching pointer in `.agents/skills/`.
+  Reverse: every pointer there MUST be listed in the manifest with
+  `codex` in `surfaces:`.
 
 MCP example only — live config never committed
   `.codex/mcp.example.json` exists and parses; `.codex/mcp.json`
@@ -42,7 +45,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 CODEX_DIR = REPO_ROOT / ".codex"
-SKILLS_DIR = CODEX_DIR / "skills"
+SKILLS_DIR = REPO_ROOT / ".agents" / "skills"  # ADR-027 §9: where Codex discovers skills
 RULES_DIR = CODEX_DIR / "rules"
 WORKFLOWS_DIR = CODEX_DIR / "workflows"
 AUTOMATIONS_DIR = CODEX_DIR / "automations"
@@ -83,15 +86,15 @@ def test_manifest_codex_surface_is_adapter() -> None:
 
 
 def test_codex_skill_pointers_reference_canonical() -> None:
-    """Every `.codex/skills/<id>.md` references its canonical
+    """Every `.agents/skills/<id>/SKILL.md` references its
     canonical SKILL.md. This is the structural barrier against the
     Codex directory becoming a parallel fork.
     """
-    pointers = sorted(SKILLS_DIR.glob("*.md"))
+    pointers = sorted(SKILLS_DIR.glob("*/SKILL.md"))
     assert pointers, "expected at least one Codex skill pointer"
     for ptr in pointers:
         body = ptr.read_text(encoding="utf-8")
-        sid = ptr.stem
+        sid = ptr.parent.name
         canonical_ref = f"agentic/skills/{sid}/SKILL.md"
         assert canonical_ref in body, (
             f"{ptr.relative_to(REPO_ROOT)} must reference its canonical "
@@ -108,11 +111,11 @@ def test_codex_skills_match_manifest_surfaces_codex() -> None:
     """
     doc = _load_manifest()
     declared_codex_skills = {s["id"] for s in (doc.get("skills") or []) if "codex" in (s.get("surfaces") or [])}
-    pointer_skills = {p.stem for p in SKILLS_DIR.glob("*.md")}
+    pointer_skills = {p.parent.name for p in SKILLS_DIR.glob("*/SKILL.md")}
     missing_pointers = declared_codex_skills - pointer_skills
     extra_pointers = pointer_skills - declared_codex_skills
     assert not missing_pointers, (
-        f"manifest claims codex consumes {sorted(missing_pointers)} but no pointer file exists in .codex/skills/"
+        f"manifest claims codex consumes {sorted(missing_pointers)} but no pointer exists in .agents/skills/"
     )
     assert not extra_pointers, (
         f"pointer files exist for {sorted(extra_pointers)} but the manifest does not list them under surfaces.codex"
@@ -150,11 +153,11 @@ def test_canonical_skill_files_exist() -> None:
     pointer (debug_ml_inference vs debug-ml-inference) silently
     desynced from the canonical tree.
     """
-    for ptr in SKILLS_DIR.glob("*.md"):
-        sid = ptr.stem
+    for ptr in SKILLS_DIR.glob("*/SKILL.md"):
+        sid = ptr.parent.name
         canonical = CANONICAL_SKILLS / sid / "SKILL.md"
         assert canonical.exists(), (
-            f"Codex pointer {ptr.name} references a non-existent "
+            f"Codex pointer {sid}/SKILL.md references a non-existent "
             f"canonical SKILL.md at {canonical.relative_to(REPO_ROOT)}"
         )
 

@@ -56,7 +56,12 @@ MAKEFILE = REPO_ROOT / "Makefile"
 # lowering one is a decision, not a chore.
 SCOPE: dict[str, tuple[str, int, str]] = {
     "check_doc_coherence": (r"all (\d+) cross-document checks", 8, "checks registered"),
-    "check_doc_path_refs": (r"OK — (\d+) documents", 590, "documents scanned"),
+    # Lowered 590 -> 586 on 2026-09-26, deliberately: ADR-027 §9 collapsed
+    # 55 flat Cursor and Codex skill pointers, which neither tool loaded,
+    # into 28 shared `.agents/skills/` files. Measured 613 -> 586 on the same
+    # tree; the scan still reads every tracked markdown file, `.agents/`
+    # included. The repository shrank; the gate's scope did not.
+    "check_doc_path_refs": (r"OK — (\d+) documents", 586, "documents scanned"),
     "check_cicd_template_drift": (r"OK — (\d+) shared actions", 10, "actions compared"),
     "check_vendored_runtime_drift": (r"OK — (\d+) vendored file", 34, "vendored files compared"),
     "check_common_utils_drift": (r"OK — (\d+) files scanned", 20, "files scanned"),

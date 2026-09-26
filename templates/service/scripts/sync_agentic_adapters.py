@@ -78,10 +78,18 @@ RULE_EXTENSIONS = {
 
 # Surfaces whose runtime only discovers skills laid out as
 # `<root>/<skill-id>/SKILL.md` with YAML frontmatter (name + description).
-# Claude Code ignores flat `<root>/<skill-id>.md` files entirely, so the
-# pointer must adopt the discoverable layout while still carrying zero
-# policy text (ADR-027 pointer-surface contract).
-SKILL_DIR_SURFACES = {"claude"}
+# Claude Code, Cursor and Codex all follow the open Agent Skills layout and
+# ignore flat `<root>/<skill-id>.md` files, so the pointer adopts the
+# discoverable layout while still carrying zero policy text (ADR-027
+# pointer-surface contract). Until 2026-09 only `claude` was listed, and
+# Cursor and Codex discovered none of the skills (ADR-027 §9).
+SKILL_DIR_SURFACES = {"claude", "cursor", "codex"}
+
+# Where the flat pointers used to live. Generated pointers left there by an
+# earlier render are removed, so a `copier update` migrates a service instead
+# of leaving a second, invisible copy behind. Only files the generator wrote
+# (they name their canonical source) are touched.
+LEGACY_SKILL_ROOTS = (".cursor/skills", ".codex/skills")
 
 WORKFLOW_ROOT_KEYS = ("workflows", "commands")
 
@@ -220,6 +228,78 @@ def _remove_stale_skill_dirs(root: Path, expected: set[Path], check: bool) -> bo
     return changed
 
 
+def _remove_legacy_skill_pointers(check: bool) -> bool:
+    """Delete flat skill pointers an earlier layout generated (ADR-027 §9)."""
+    changed = False
+    for legacy in LEGACY_SKILL_ROOTS:
+        root = REPO_ROOT / legacy
+        if not root.is_dir():
+            continue
+        for item in sorted(root.glob("*.md")):
+            body = item.read_text(encoding="utf-8")
+            generated = "**Canonical source**: `agentic/skills/" in body or "Skills Index" in body
+            if not generated:
+                continue
+            changed = True
+            if check:
+                print(f"would remove {_rel(item)}")
+            else:
+                item.unlink()
+                print(f"removed {_rel(item)}")
+        if not check and root.exists() and not any(root.iterdir()):
+            root.rmdir()
+            print(f"removed {_rel(root)}/")
+    return changed
+
+
+def _render_skill_roots(manifest: dict[str, Any], check: bool) -> bool:
+    """Render every pointer surface's skills, once per ROOT rather than per surface.
+
+    Cursor and Codex both read `.agents/skills/`. Rendered per surface, one
+    surface's pass prunes what only the other lists and each run rewrites the
+    other's files, so `--check` never settles. Grouped by root, each root is
+    written and pruned once, and each pointer names every surface that reads
+    it (ADR-027 §9).
+    """
+    surfaces = manifest.get("surfaces") or {}
+    groups: dict[str, list[str]] = {}
+    for surface, spec in sorted(surfaces.items()):
+        root = (spec.get("roots") or {}).get("skills")
+        if root and _surface_kind(spec) == "pointer":
+            groups.setdefault(root, []).append(surface)
+
+    changed = False
+    for skill_root, sharing in groups.items():
+        as_dirs = [s in SKILL_DIR_SURFACES for s in sharing]
+        if len(set(as_dirs)) != 1:
+            raise SystemExit(f"{skill_root} is shared by {sharing}, which disagree on the skill layout")
+        root = REPO_ROOT / skill_root
+        expected: set[Path] = set()
+        for skill in manifest.get("skills") or []:
+            readers = sorted(set(sharing) & set(skill.get("surfaces") or []))
+            if not readers:
+                continue
+            label = "`, `".join(readers)
+            args = (label, skill["id"], skill["source"], skill.get("mode", "AUTO"))
+            if as_dirs[0]:
+                path, body = root / skill["id"] / "SKILL.md", _skill_pointer_dir(*args)
+            else:
+                path, body = root / f"{skill['id']}.md", _skill_pointer(*args)
+            expected.add(path)
+            changed |= _write(path, body, check)
+        for surface in sharing:
+            roots = surfaces[surface].get("roots") or {}
+            if "skills_index" not in roots:
+                continue
+            expected.add(REPO_ROOT / roots["skills_index"])
+            listed = [s for s in (manifest.get("skills") or []) if surface in (s.get("surfaces") or [])]
+            changed |= _copy_index("`, `".join(sharing), roots, listed, check)
+        changed |= _remove_stale(root, expected, (".md",), check)
+        if as_dirs[0]:
+            changed |= _remove_stale_skill_dirs(root, expected, check)
+    return changed
+
+
 def _render_skill_index(surface: str, skills: list[dict[str, Any]]) -> str:
     rows = [
         "| Skill | Mode | Canonical |",
@@ -229,7 +309,8 @@ def _render_skill_index(surface: str, skills: list[dict[str, Any]]) -> str:
         sid = skill["id"]
         rows.append(f"| `{sid}` | `{skill.get('mode', 'AUTO')}` | `{skill['source']}` |")
     table = "\n".join(rows)
-    return f"""# {surface.title()} Skills Index
+    title = "Shared" if "`" in surface else surface.title()
+    return f"""# {title} Skills Index
 
 **Adapter surface**: `{surface}`
 **Authority**: `AGENTS.md` + `templates/config/agentic_manifest.yaml`
@@ -347,7 +428,7 @@ logic here.
 
 def render(manifest: dict[str, Any], check: bool) -> int:
     surfaces = manifest.get("surfaces") or {}
-    changed = False
+    changed = _render_skill_roots(manifest, check)
 
     for surface, spec in sorted(surfaces.items()):
         kind = _surface_kind(spec)
@@ -377,40 +458,6 @@ def render(manifest: dict[str, Any], check: bool) -> int:
                 )
             changed |= _remove_stale(root, expected, (".md", ".mdc"), check)
 
-        skill_root = roots.get("skills")
-        if skill_root:
-            root = REPO_ROOT / skill_root
-            as_dirs = surface in SKILL_DIR_SURFACES
-            expected = set()
-            for skill in manifest.get("skills") or []:
-                if surface not in (skill.get("surfaces") or []):
-                    continue
-                if as_dirs:
-                    path = root / skill["id"] / "SKILL.md"
-                    body = _skill_pointer_dir(
-                        surface,
-                        skill["id"],
-                        skill["source"],
-                        skill.get("mode", "AUTO"),
-                    )
-                else:
-                    path = root / f"{skill['id']}.md"
-                    body = _skill_pointer(
-                        surface,
-                        skill["id"],
-                        skill["source"],
-                        skill.get("mode", "AUTO"),
-                    )
-                expected.add(path)
-                changed |= _write(path, body, check)
-            if "skills_index" in roots:
-                expected.add(REPO_ROOT / roots["skills_index"])
-            changed |= _remove_stale(root, expected, (".md",), check)
-            if as_dirs:
-                changed |= _remove_stale_skill_dirs(root, expected, check)
-        surface_skills = [s for s in (manifest.get("skills") or []) if surface in (s.get("surfaces") or [])]
-        changed |= _copy_index(surface, roots, surface_skills, check)
-
         workflow_key = next((k for k in WORKFLOW_ROOT_KEYS if k in roots), None)
         if workflow_key:
             root = REPO_ROOT / roots[workflow_key]
@@ -432,6 +479,7 @@ def render(manifest: dict[str, Any], check: bool) -> int:
                 )
             changed |= _remove_stale(root, expected, (".md",), check)
 
+    changed |= _remove_legacy_skill_pointers(check)
     return 1 if check and changed else 0
 
 
