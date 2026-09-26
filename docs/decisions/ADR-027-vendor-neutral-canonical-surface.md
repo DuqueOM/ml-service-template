@@ -215,6 +215,7 @@ trigger, "a future IDE reads a neutral directory natively", arriving for
 skills.
 
 **Enforced by:**
+
 - `validate_agentic_manifest.py`, `skill_discovery`. A table of each tool's
   documented roots, kept apart from the manifest, fails:
   - a surface whose skills root its tool does not read;
