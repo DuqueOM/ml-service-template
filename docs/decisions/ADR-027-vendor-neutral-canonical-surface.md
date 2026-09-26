@@ -1,6 +1,6 @@
 # ADR-027 — Vendor-Neutral Canonical Agentic Surface
 
-- **Status**: Accepted
+- **Status**: Accepted; amended 2026-09-26 — skills render where each tool discovers them (§9)
 - **Date**: 2026-06-08
 - **Deciders**: Template maintainer (`@DuqueOM`)
 - **Supersedes / amends**: Amends ADR-023 §3 invariant **I-4** (introduces
@@ -181,3 +181,58 @@ The single-source-of-truth guarantee is **preserved** even though
 - `AGENTS.md` — authority, unchanged.
 - Official source: `docs.devin.ai/desktop/devin-desktop-faq`,
   `docs.devin.ai/desktop/cascade/workflows` (verified 2026-06-08).
+
+## 9. Amendment, 2026-09-26 — skills render where each tool discovers them
+
+**Decision.** Pointer surfaces publish a skill as `<root>/<id>/SKILL.md` with
+`name` and `description` front-matter on every tool that discovers skills,
+and at a root that tool reads. Cursor and Codex share `.agents/skills/`.
+
+**Why.** §2 made the pointer layout a per-surface choice and the manifest the
+record of it. Checked against each tool's documentation on 2026-09-26:
+
+| Tool | Discovers skills at | Received until now |
+| --- | --- | --- |
+| Claude Code | `.claude/skills/<id>/SKILL.md` | that layout (fixed after audit R6) |
+| Cursor | `.cursor/skills/` or `.agents/skills/<id>/SKILL.md`, `name` equal to the folder | flat `.cursor/skills/<id>.md` |
+| Codex | `.agents/skills/<id>/SKILL.md`, from the working directory up to the repository root, and nowhere else in a repository | flat `.codex/skills/<id>.md` |
+
+Neither Cursor nor Codex listed a single skill, in this repository or in any
+scaffolded service. `validate_agentic_manifest.py --strict` stayed green
+because it compared the rendered files with the manifest, and the manifest
+named those places. The R6 fix made the Claude pointer loadable without asking
+whether the other two were. The same gap was first found downstream, in
+ml-platform's QA-4 round twelve.
+
+**Why `.agents/skills/` and not `.cursor/skills/<id>/SKILL.md` for Cursor.**
+Cursor reads both directories. Codex reads only `.agents/skills/`. Rendering
+Cursor's copy under `.cursor/skills/` as well would list every skill twice in
+Cursor. The shared root is rendered once, and each pointer names every surface
+that reads it. This is not the hidden canonical `.agents/` that §7 rejected:
+the canonical store is still `agentic/`, and `.agents/skills/` holds generated
+pointers, like every other adapter directory. It is §6's second revisit
+trigger, "a future IDE reads a neutral directory natively", arriving for
+skills.
+
+**Enforced by:**
+
+- `validate_agentic_manifest.py`, `skill_discovery`. A table of each tool's
+  documented roots, kept apart from the manifest, fails:
+  - a surface whose skills root its tool does not read;
+  - a pointer surface with no recorded contract;
+  - a flat file in a skills root;
+  - a generated pointer left at the old flat layout.
+
+  Loadability (front-matter, name equal to the folder, description of at most
+  1,024 characters) now applies to Cursor and Codex as well as Claude.
+- `templates/tests/governance/test_skill_discovery_contract.py`, including the
+  old layout failing, the shared root settling on a second render, and the
+  migration of old pointers.
+
+**Migration.** `sync_agentic_adapters.py` removes flat skill pointers it
+generated under `.cursor/skills/` and `.codex/skills/`. It recognises them by
+the canonical source they name, and leaves any other file alone. `copier
+update` therefore migrates a scaffolded service by itself. See `MIGRATION.md`.
+
+**Revisit when** a tool documents a different discovery root. Update the
+table in `validate_agentic_manifest.py` first, and the manifest will follow.

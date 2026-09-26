@@ -17,6 +17,14 @@ contract that prevents future versions from breaking adopters silently.
 
 ---
 
+## v0.29.0 → next release (unreleased)
+
+| Change | Manual action required |
+| -------- | ------------------------ |
+| **Cursor and Codex skills move to `.agents/skills/<id>/SKILL.md`** (ADR-027 §9) | None for generated files: the `copier update` task runs `sync_agentic_adapters.py`, which writes the new layout and removes the flat pointers it generated under `.cursor/skills/` and `.codex/skills/`. Neither tool loaded those, so nothing that worked stops working. If you hand-wrote files in either directory, they are left alone; move any real skill to `.agents/skills/<id>/SKILL.md` with `name` and `description` front-matter, or Cursor and Codex will not load it either. Update any tooling of yours that read `.codex/skills/`. |
+
+---
+
 ## v0.28.0 → v0.29.0 (2026-09-21)
 
 | Change | Manual action required |

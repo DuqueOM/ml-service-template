@@ -513,7 +513,6 @@ agentic/workflows/     # CANONICAL workflows: 18 files
 .devin/workflows/      # generated MIRROR: 20 files
 
 .cursor/rules/         # generated rule pointers: 19 .mdc files
-.cursor/skills/        # generated skill pointers + INDEX.md: 27 skills
 .cursor/commands/      # generated workflow pointers: 20 commands
 
 .claude/rules/         # generated rule pointers: 19 .md files
@@ -521,9 +520,10 @@ agentic/workflows/     # CANONICAL workflows: 18 files
 .claude/commands/      # generated workflow pointers: 20 commands
 
 .codex/rules/          # generated rule pointers: 19 .md files
-.codex/skills/         # generated skill pointers: 27 skills
 .codex/workflows/      # generated workflow pointers: 20 workflows
 .codex/automations/    # Codex-specific schedules/events, never STOP writes
+
+.agents/skills/        # generated skill pointers + INDEX.md, shared by Cursor and Codex: 27 skills as <id>/SKILL.md (ADR-027 §9)
 ```
 
 Note: the project often says "17 rules" because rule 04 is split into `04a-python-serving` and `04b-python-training`.
@@ -534,7 +534,7 @@ The on-disk canonical set is therefore 18 files.
 | Asset | Canonical (`agentic/`) | Devin | Cursor | Claude | Codex |
 | ------- | ------------------------ | ------- | -------- | -------- | ------- |
 | Rules | `agentic/rules/*.md` | `.devin/rules/*.md` mirror | `.cursor/rules/*.mdc` pointers | `.claude/rules/*.md` pointers | `.codex/rules/*.md` pointers |
-| Skills | `agentic/skills/**/SKILL.md` | `.devin/skills/**/SKILL.md` mirror | `.cursor/skills/*.md` pointers | `.claude/skills/<id>/SKILL.md` pointers | `.codex/skills/*.md` pointers |
+| Skills | `agentic/skills/**/SKILL.md` | `.devin/skills/**/SKILL.md` mirror | `.agents/skills/<id>/SKILL.md` pointers (shared with Codex) | `.claude/skills/<id>/SKILL.md` pointers | `.agents/skills/<id>/SKILL.md` pointers (shared with Cursor) |
 | Workflows | `agentic/workflows/*.md` | `.devin/workflows/*.md` mirror | `.cursor/commands/*.md` pointers | `.claude/commands/*.md` pointers | `.codex/workflows/*.md` pointers |
 | Context | `AGENT_CONTEXT.md` | `.devin_context.md` | `.cursor_context.md` | `.claude_context.md` | `.codex_context.md` |
 

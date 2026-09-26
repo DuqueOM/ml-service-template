@@ -506,8 +506,11 @@ surfaces:
     roots:
       rules: ".cursor/rules"
       commands: ".cursor/commands"
-      skills: ".cursor/skills"
-      skills_index: ".cursor/skills/INDEX.md"
+      # `.agents/skills/<id>/SKILL.md`: the open Agent Skills directory, which
+      # Cursor reads and Codex reads exclusively; shared so each skill is
+      # listed once in Cursor rather than twice (ADR-027 §9).
+      skills: ".agents/skills"
+      skills_index: ".agents/skills/INDEX.md"
     context_pointer: ".cursor_context.md"
   claude:
     status: "adapter"
@@ -526,7 +529,7 @@ surfaces:
     roots:
       readme: ".codex/README.md"
       rules: ".codex/rules"
-      skills: ".codex/skills"
+      skills: ".agents/skills"  # the only repository location Codex discovers skills in (ADR-027 §9)
       workflows: ".codex/workflows"
       automations: ".codex/automations"
       mcp_example: ".codex/mcp.example.json"
