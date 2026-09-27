@@ -17,11 +17,13 @@ contract that prevents future versions from breaking adopters silently.
 
 ---
 
-## v0.29.0 → next release (unreleased)
+## v0.29.0 → v0.30.0 (2026-09-26)
 
 | Change | Manual action required |
 | -------- | ------------------------ |
 | **Cursor and Codex skills move to `.agents/skills/<id>/SKILL.md`** (ADR-027 §9) | None for generated files: the `copier update` task runs `sync_agentic_adapters.py`, which writes the new layout and removes the flat pointers it generated under `.cursor/skills/` and `.codex/skills/`. Neither tool loaded those, so nothing that worked stops working. If you hand-wrote files in either directory, they are left alone; move any real skill to `.agents/skills/<id>/SKILL.md` with `name` and `description` front-matter, or Cursor and Codex will not load it either. Update any tooling of yours that read `.codex/skills/`. |
+| **Scheduled CronJobs get a NetworkPolicy** (`k8s/base/networkpolicy-jobs.yaml`, and `patch-networkpolicy-jobs.yaml` in every `gcp-*` and `aws-*` overlay) | None with the shipped overlays. If you maintain your own overlay, add the jobs patch with the same cloud-storage allowlist you give the predictor, or the drift, performance and ground-truth jobs keep no egress under default-deny. |
+| **GitHub Actions identities are created by Terraform** (Workload Identity pool and provider on GCP; `drift_ci` and `retrain_ci` roles on AWS) | None by default: `github_repo` defaults to `""`, which creates nothing. To use them, set `github_repo = "<owner>/<repo>"` and apply. If you created a pool by hand from `gcp-wif-setup.md`, keep `github_repo = ""` or import the pool first, or the apply collides with it. |
 
 ---
 
