@@ -15,6 +15,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+## [v0.30.0] - 2026-09-26
+
+Bump level: **`v0.x.0`, MAJOR-class** (`docs/RELEASING.md` §2.1). The skill
+pointers in scaffolded output move from `.cursor/skills/<id>.md` and
+`.codex/skills/<id>.md` to `.agents/skills/<id>/SKILL.md`: a change in
+scaffolded paths. `v1.0.0` stays reserved for real cloud E2E evidence.
+
+### Breaking for adopters
+
+| Change | Manual action required |
+| -------- | ------------------------ |
+| **Cursor and Codex skills move to `.agents/skills/<id>/SKILL.md`** (ADR-027 §9, §10) | None for generated files: `copier update` runs `sync_agentic_adapters.py`, which writes the new layout and removes the flat pointers it generated. Neither tool loaded those, so nothing that worked stops working. Hand-written files in `.cursor/skills/` or `.codex/skills/` are left alone; move any real skill to `.agents/skills/<id>/SKILL.md` with `name` and `description`. |
+| **Scheduled CronJobs get a NetworkPolicy** (#182) | None with the shipped overlays. A custom overlay needs `patch-networkpolicy-jobs.yaml` with its cloud-storage allowlist. |
+| **GitHub Actions identities are created by Terraform** (#183) | None by default (`github_repo = ""`). Set it to use them; keep it empty if you created a pool by hand. |
+
 ### Fixed — Cursor lists every skill twice, and the docs said once (ADR-027 §10)
 
 - **Cursor also reads `.claude/skills/` and `.codex/skills/`**, as documented
