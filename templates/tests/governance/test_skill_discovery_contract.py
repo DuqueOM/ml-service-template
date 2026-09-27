@@ -154,6 +154,39 @@ def test_the_pointer_walk_checks_loadability_on_cursor(world: Path) -> None:
     assert any("missing YAML frontmatter (cursor will not load it)" in e for e in errors), errors
 
 
+def _pointer(world: Path, root: str, description: str, source: str = "agentic/skills/deploy/SKILL.md") -> None:
+    path = world / root / "deploy" / "SKILL.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f'---\nname: deploy\ndescription: "{description}"\n---\n\n**Canonical source**: `{source}`\nAGENTS.md\n',
+        encoding="utf-8",
+    )
+
+
+def test_cursor_reaching_two_identical_copies_is_accepted(world: Path) -> None:
+    """Cursor reads `.agents/skills/` and, for compatibility, `.claude/skills/` (ADR-027 §10)."""
+    _pointer(world, ".agents/skills", "Ship it")
+    _pointer(world, ".claude/skills", "Ship it")
+    assert validate._validate_skill_reach(_manifest({"cursor": ".agents/skills"})) == []
+
+
+@pytest.mark.parametrize(
+    ("description", "source"),
+    [("Something else", "agentic/skills/deploy/SKILL.md"), ("Ship it", "agentic/skills/other/SKILL.md")],
+    ids=["description", "source"],
+)
+def test_cursor_reaching_copies_that_disagree_fails(world: Path, description: str, source: str) -> None:
+    """Two skills under one name, and Cursor, not this repository, picks which runs."""
+    _pointer(world, ".agents/skills", "Ship it")
+    _pointer(world, ".claude/skills", description, source)
+    errors = validate._validate_skill_reach(_manifest({"cursor": ".agents/skills"}))
+    assert any("cursor reaches copies that disagree" in e for e in errors), errors
+
+
+def test_the_validator_runs_the_reach_check() -> None:
+    assert validate.run(strict=False)["skill_reach"] == []
+
+
 # --- the renderer ---------------------------------------------------------------
 
 

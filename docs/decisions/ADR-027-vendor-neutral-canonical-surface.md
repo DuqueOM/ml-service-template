@@ -1,6 +1,7 @@
 # ADR-027 — Vendor-Neutral Canonical Agentic Surface
 
-- **Status**: Accepted; amended 2026-09-26 — skills render where each tool discovers them (§9)
+- **Status**: Accepted; amended 2026-09-26 — skills render where each tool discovers them (§9);
+  §9 corrected the same day (§10)
 - **Date**: 2026-06-08
 - **Deciders**: Template maintainer (`@DuqueOM`)
 - **Supersedes / amends**: Amends ADR-023 §3 invariant **I-4** (introduces
@@ -236,3 +237,21 @@ update` therefore migrates a scaffolded service by itself. See `MIGRATION.md`.
 
 **Revisit when** a tool documents a different discovery root. Update the
 table in `validate_agentic_manifest.py` first, and the manifest will follow.
+
+## 10. Correction, 2026-09-26 — Cursor lists each skill twice, and §9 said once
+
+§9 says sharing `.agents/skills/` avoids listing every skill twice in
+Cursor. It does not. Cursor's documentation also names `.claude/skills/` and
+`.codex/skills/` as compatibility directories, so Cursor reaches every skill
+through `.agents/skills/` and through `.claude/skills/`. ml-platform's QA-4
+round thirteen found the same sentence there. The first check of Cursor's
+documentation read the project-level section and missed the compatibility
+section.
+
+No layout avoids the duplicate while Claude Code reads only `.claude/` and
+Codex only `.agents/`. What can be guaranteed is that the two entries are the
+same skill. `validate_agentic_manifest.py` gains `skill_reach`, which fails
+when one tool reaches copies that disagree on `name`, `description` or
+canonical source. The table of discovery roots now lists Cursor's
+compatibility paths. §9's decision stands; only its "listed once" was
+wrong.

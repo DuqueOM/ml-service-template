@@ -293,10 +293,48 @@ def _validate_domain_enum(manifest: dict) -> list[str]:
 #   Codex        https://learn.chatgpt.com/docs/build-skills       .agents/skills/<id>/SKILL.md, nothing else
 SKILL_DISCOVERY_ROOTS: dict[str, tuple[str, ...]] = {
     "claude": (".claude/skills",),
-    "cursor": (".cursor/skills", ".agents/skills"),
+    # Cursor ALSO reads Claude's and Codex's directories as documented
+    # "compatibility" paths (re-checked 2026-09-26), so it reaches each skill
+    # through `.agents/` and `.claude/` and lists it twice. No layout avoids
+    # that while Claude reads only `.claude/` and Codex only `.agents/`; the
+    # copies it reaches must therefore be the same skill (`skill_reach`).
+    "cursor": (".cursor/skills", ".agents/skills", ".claude/skills", ".codex/skills"),
     "codex": (".agents/skills",),
 }
 LEGACY_SKILL_ROOTS = (".cursor/skills", ".codex/skills")
+
+
+_CANONICAL_LINE = re.compile(r"^\*\*Canonical source\*\*: `([^`]+)`", re.MULTILINE)
+
+
+def _validate_skill_reach(manifest: dict) -> list[str]:
+    """One tool reaching one skill through several roots must reach the same skill.
+
+    Listed twice is noise. Listed twice with a different description or a
+    different canonical source is two skills under one name, and the tool,
+    not this repository, picks which runs (ADR-027 §10).
+    """
+    errors: list[str] = []
+    for tool, roots in sorted(SKILL_DISCOVERY_ROOTS.items()):
+        for skill in manifest.get("skills") or []:
+            copies = [REPO_ROOT / root / skill["id"] / "SKILL.md" for root in roots]
+            reached = [c for c in copies if c.is_file()]
+            if len(reached) < 2:
+                continue
+            variants: dict[tuple[object, object, object], list[str]] = {}
+            for copy in reached:
+                body = copy.read_text(encoding="utf-8")
+                parts = body.split("---", 2)
+                meta = (yaml.safe_load(parts[1]) or {}) if body.startswith("---") and len(parts) == 3 else {}
+                source = _CANONICAL_LINE.search(body)
+                key = (meta.get("name"), meta.get("description"), source.group(1) if source else None)
+                variants.setdefault(key, []).append(str(copy.relative_to(REPO_ROOT)))
+            if len(variants) > 1:
+                errors.append(
+                    f"skills:{skill['id']}: {tool} reaches copies that disagree on name, description or "
+                    f"canonical source: {' vs '.join(', '.join(v) for v in variants.values())}"
+                )
+    return errors
 
 
 def _validate_skill_discovery(manifest: dict) -> list[str]:
@@ -700,6 +738,7 @@ def run(strict: bool) -> dict:
     results["surface_roots"] = _validate_surface_roots(manifest)
     results["adapter_pointers"] = _validate_adapter_pointers(manifest)
     results["skill_discovery"] = _validate_skill_discovery(manifest)
+    results["skill_reach"] = _validate_skill_reach(manifest)
     results["mode_enum"] = _validate_mode_enum(manifest)
     results["domain_enum"] = _validate_domain_enum(manifest)
     results["context_examples"] = validate_context_examples(strict=strict)

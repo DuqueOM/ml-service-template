@@ -15,6 +15,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Fixed — Cursor lists every skill twice, and the docs said once (ADR-027 §10)
+
+- **Cursor also reads `.claude/skills/` and `.codex/skills/`**, as documented
+  compatibility directories. It therefore reaches every skill twice, through
+  `.agents/skills/` and `.claude/skills/`, and ADR-027 §9, both manifests and
+  both Cursor context files said "listed once". Found by ml-platform's QA-4
+  round thirteen in the same sentence there.
+- **The duplicate cannot be avoided**, while Claude Code reads only `.claude/`
+  and Codex only `.agents/`. It can be kept harmless.
+  `validate_agentic_manifest.py` gains `skill_reach`: one tool reaching copies
+  that disagree on `name`, `description` or canonical source fails, because
+  that is two skills under one name. Cursor's compatibility paths join the
+  discovery table.
+
 ### Fixed — Cursor and Codex discovered none of the skills (ADR-027 §9)
 
 - **Only the Claude surface used the layout skill tools load.** Cursor received
@@ -60,6 +74,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
   surfaces that read from either root.
 - The same defect was found downstream first, in ml-platform's QA-4 round
   twelve.
+- **Corrected the same day** (entry above): sharing `.agents/skills/` does
+  not list each skill once in Cursor. Cursor also reads `.claude/skills/` for
+  compatibility. See the entry above and ADR-027 §10.
 
 ### Added — GitHub Actions has identities Terraform creates and trusts (#183)
 
