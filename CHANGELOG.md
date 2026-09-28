@@ -15,6 +15,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+## [v0.30.2] - 2026-09-28
+
+Bump level: **PATCH**. Test-fixture content only (#243); no `MIGRATION.md` entry.
+
 ### Fixed — the same fixture carried a literal PEM private-key header
 
 - #241 moved the fake Google API key to runtime and left the PEM header beside
