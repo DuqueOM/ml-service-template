@@ -15,6 +15,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+## [v0.30.1] - 2026-09-28
+
+Bump level: **PATCH**. Test-fixture content only; no scaffolded path, contract
+or hook changes, so there is no `MIGRATION.md` entry.
+
 ### Fixed — two test fixtures carried a literal key-shaped string, and GitHub alerted on every copy
 
 - **GitHub secret scanning opened a `google_api_key` alert** here, and again in
