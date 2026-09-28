@@ -19,6 +19,10 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 # The shape GitHub's `google_api_key` scanner reports, assembled here so this
 # file does not contain it either.
 _GCP_KEY = re.compile("AI" + r"za[0-9A-Za-z_\-]{35}")
+# A PEM private-key header, which every `detect-private-key` hook refuses. In
+# Python only: a breach playbook legitimately names the header it greps for,
+# and markdown cannot assemble a string at runtime.
+_PEM_HEADER = re.compile("-----BEGIN" + r"( [A-Z]+)? PRIVATE KEY-----")
 
 
 def _tracked() -> list[Path]:
@@ -29,6 +33,7 @@ def _tracked() -> list[Path]:
 def test_the_pattern_matches_a_key_shaped_string() -> None:
     """A scanner that matches nothing passes everything."""
     assert _GCP_KEY.search("AIza" + "Example" * 5)
+    assert _PEM_HEADER.search("-----BEGIN RSA " + "PRIVATE KEY-----")
 
 
 def test_no_tracked_file_carries_a_literal_key_shape() -> None:
@@ -44,3 +49,15 @@ def test_no_tracked_file_carries_a_literal_key_shape() -> None:
         "literal Google-API-key-shaped strings — build test fixtures at runtime "
         '("AIza" + "Example" * 5) so secret scanning does not alert on them: ' + ", ".join(hits)
     )
+
+
+def test_no_python_file_carries_a_literal_private_key_header() -> None:
+    """Round two of the same defect: the fixture beside the fake key carried a PEM header too."""
+    hits = []
+    for path in _tracked():
+        if path.suffix != ".py":
+            continue
+        text = path.read_text(encoding="utf-8")
+        for match in _PEM_HEADER.finditer(text):
+            hits.append(f"{path.relative_to(REPO_ROOT)}:{text[: match.start()].count(chr(10)) + 1}")
+    assert not hits, "literal PEM private-key headers in Python — assemble them at runtime: " + ", ".join(hits)

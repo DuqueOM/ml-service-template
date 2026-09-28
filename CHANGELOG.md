@@ -15,6 +15,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Fixed — the same fixture carried a literal PEM private-key header
+
+- #241 moved the fake Google API key to runtime and left the PEM header beside
+  it: an RSA private-key PEM opening line, not named literally here because
+  the name alone is what the hooks match. Every `detect-private-key` hook
+  refuses it. A
+  downstream repository's hook stopped a commit of a generated service on it.
+  `test_memory_redaction.py` carried a full truncated block, marked
+  `gitleaks:allow`.
+- Both fixtures assemble the header at runtime. The redactor still receives
+  the whole block, and 70 fixture tests pass.
+  `test_no_literal_key_shapes.py` also fails on a literal PEM private-key
+  header in any Python file; watched failing with a probe. Markdown is exempt:
+  the breach playbook names the header an engineer greps for, and cannot
+  assemble a string.
+- The first fix should have covered every secret shape these fixtures use, not
+  only the one GitHub reported.
+
 ## [v0.30.1] - 2026-09-28
 
 Bump level: **PATCH**. Test-fixture content only; no scaffolded path, contract

@@ -232,7 +232,9 @@ def test_secret_patterns_actually_match_known_shapes() -> None:
         # is what GitHub secret scanning alerts on, in every repository that
         # copies this file. It did, in the template and in a generated service.
         "GCP API key": "AIza" + "Example" * 5,
-        "PEM private key block": "-----BEGIN RSA PRIVATE KEY-----",
+        # Assembled like the key above: a literal PEM header trips every
+        # private-key hook in every repository that copies this file.
+        "PEM private key block": "-----BEGIN RSA " + "PRIVATE KEY-----",
         "bearer token": "Authorization: Bearer abcdefghijklmnopqrstuvwxyz0123",
         "credentials embedded in URL": "postgres://user:hunter2@db.internal:5432/app",
     }
