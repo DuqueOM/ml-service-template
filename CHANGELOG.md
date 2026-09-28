@@ -15,6 +15,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Fixed — two test fixtures carried a literal key-shaped string, and GitHub alerted on every copy
+
+- **GitHub secret scanning opened a `google_api_key` alert** here, and again in
+  a service generated from this template. The string was a deliberately fake
+  key in `test_context_files_hygiene.py`, the sample proving the template's own
+  secret patterns still match. `test_memory_redaction.py` carried a second
+  one. Nothing leaked and nothing needs rotating, but an alert that is always a
+  false positive teaches its reader to dismiss alerts.
+- **Both fixtures now build the string at runtime** (`"AIza" + "Example" * 5`).
+  That exercises the same patterns and never matches as a literal.
+- **`templates/tests/governance/test_no_literal_key_shapes.py`** fails on any
+  tracked file carrying a literal Google-API-key shape, including a newly
+  scaffolded one. Watched failing with a probe file.
+
 ## [v0.30.0] - 2026-09-26
 
 Bump level: **`v0.x.0`, MAJOR-class** (`docs/RELEASING.md` §2.1). The skill
