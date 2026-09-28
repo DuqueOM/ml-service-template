@@ -228,7 +228,10 @@ def test_secret_patterns_actually_match_known_shapes() -> None:
     """A scanner that matches nothing passes everything. Pin the patterns."""
     samples = {
         "AWS access key id": "AKIAIOSFODNN7EXAMPLE",
-        "GCP API key": "AIzaSyD-ExampleExampleExampleExampleEx1",
+        # Assembled at runtime, and obviously fake: a literal key-shaped string
+        # is what GitHub secret scanning alerts on, in every repository that
+        # copies this file. It did, in the template and in a generated service.
+        "GCP API key": "AIza" + "Example" * 5,
         "PEM private key block": "-----BEGIN RSA PRIVATE KEY-----",
         "bearer token": "Authorization: Bearer abcdefghijklmnopqrstuvwxyz0123",
         "credentials embedded in URL": "postgres://user:hunter2@db.internal:5432/app",

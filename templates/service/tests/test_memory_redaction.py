@@ -52,7 +52,9 @@ from common_utils.memory_redaction import (  # noqa: E402  type: ignore[import-n
 
 CASES_SECRETS: list[tuple[str, str]] = [
     ("aws_access_key_id", "Embedded key: AKIAIOSFODNN7EXAMPLE in config"),
-    ("gcp_api_key", "GCP key: AIzaSyD-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+    # Assembled at runtime for the same reason as test_context_files_hygiene.py:
+    # a literal key-shaped string triggers GitHub secret scanning downstream.
+    ("gcp_api_key", "GCP key: " + "AIza" + "Example" * 5 + "aa"),
     ("github_pat_classic", "PAT: ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
     (
         "openai_api_key_legacy",
