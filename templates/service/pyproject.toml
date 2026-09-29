@@ -7,7 +7,7 @@
 # TODO: Replace {@ service_slug @}, {@ service_name @}, and author info.
 
 [build-system]
-requires = ["setuptools >= 68.0", "wheel"]
+requires = ["setuptools >= 84.0.0", "wheel"]
 build-backend = "setuptools.backends._legacy:_Backend"
 
 [project]
