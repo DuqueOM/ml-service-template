@@ -15,6 +15,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Changed — Dependabot stops proposing ydata-profiling 4.13+, which cannot install beside matplotlib 3.11
+
+- ydata-profiling 4.13.0 through 4.18.4 all cap `matplotlib<=3.10`. The EDA
+  lane pins `matplotlib~=3.11`, and `~=4.6` resolves to 4.12.2, the last
+  release without the cap. #236 proposed `~=4.18` and its self-audit lane
+  failed on exactly that conflict, so it could never have merged.
+- An `ignore` entry with the evidence, beside the numpy, shap and pandas
+  entries of the same kind. Lift it when ydata-profiling supports matplotlib
+  3.11.
+
 ## [v0.30.2] - 2026-09-28
 
 Bump level: **PATCH**. Test-fixture content only (#243); no `MIGRATION.md` entry.
