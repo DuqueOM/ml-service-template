@@ -15,6 +15,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+## [v0.31.0] - 2026-09-29
+
+Bump level: **MINOR**. `service_name` is recorded (#254): the rendered answers
+file gains a line, and an interactive `copier copy` asks one more question
+with a default. Backward-compatible scaffold output, so not a PATCH (§1.1); no
+§1.3 contract changes. Also Dependabot's uvicorn 0.54, boto3 1.43.103 and
+setuptools>=84 in the service, and an ignore rule (#245). No `MIGRATION.md`
+entry: nothing requires a manual action beyond answering the new question.
+
 ### Fixed — a custom `service_name` was used once and never recorded
 
 - `service_name` was `when: false`, like the derived casings, so it never
