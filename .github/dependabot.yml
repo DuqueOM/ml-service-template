@@ -145,6 +145,16 @@ updates:
       # about this group only. Lift it when ydata-profiling supports pandas 3.
       - dependency-name: "pandas"
         update-types: ["version-update:semver-major"]
+      # ydata-profiling >= 4.13 caps `matplotlib<=3.10`, and the EDA lane pins
+      # `matplotlib~=3.11`. Every release from 4.13.0 to 4.18.4 carries that
+      # cap; 4.12.2 was the last without one, and it is what `~=4.6` resolves
+      # to today. Proven by #236's self-audit lane (~=4.18), which exited
+      # "Cannot install … ydata-profiling … and matplotlib~=3.11 because these
+      # package versions have conflicting dependencies". Moving matplotlib
+      # back to 3.10 to admit a profiling tool would be the tail wagging the
+      # dog. Lift this when ydata-profiling supports matplotlib 3.11.
+      - dependency-name: "ydata-profiling"
+        versions: [">=4.13"]
     commit-message:
       prefix: "deps"
     labels:
