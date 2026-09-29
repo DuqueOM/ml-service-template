@@ -133,7 +133,7 @@ corresponding derived variable:
 
 | Legacy bespoke token | After (Copier/Jinja, `{@ @}` family) |
 | --- | --- |
-| `{ServiceName}` | `{@ service_name @}`  (derived: PascalCase of slug) |
+| `{ServiceName}` | `{@ service_name @}`  (default: PascalCase of slug; recorded, see §2.3 amendment) |
 | `{service-name}` | `{@ service_kebab @}` (derived: slug with `_`→`-`) |
 | `{service}` | `{@ service_slug @}` |
 | `{SERVICE}` | `{@ service_upper @}` (derived: UPPER of slug) |
@@ -165,7 +165,7 @@ scaffolder (where `ServiceName` and the slug could disagree):
 ```yaml
 service_slug:   { type: str, help: "snake_case slug (e.g. fraud_detector)" }
                 # validated against ^[a-z][a-z0-9_]*$
-service_name:   # derived: PascalCase of slug   (when: false)
+service_name:   # asked, default PascalCase of slug; RECORDED (amendment 2026-09-29)
 service_kebab:  # derived: slug with _ -> -      (when: false)
 service_upper:  # derived: UPPER of slug         (when: false)
 gh_org:         { type: str, help: "GitHub org for cosign/Kyverno trust root" }
@@ -180,6 +180,24 @@ every file's **content** through Jinja (its v9 default of `.jinja` would copy
 content verbatim and leave `{@ … @}` tokens unrendered — only path names get
 rendered by default). `_answers_file: .copier-answers.yml` is committed into
 the generated service to enable `copier update`.
+
+#### Amendment 2026-09-29 — `service_name` is recorded
+
+`service_name` was `when: false`, like the other derived casings, and so was
+never written to `.copier-answers.yml`. It reaches only display text — module
+docstrings, the FastAPI title, log lines, workflow and artifact labels — and
+adopters override it: ml-platform generated its service with
+`--data service_name="Demand Forecast Serving"`. That value lived only in the
+command line. A regeneration from the answers file alone differed from the
+committed service in 60 files (ml-platform QA-4 round fourteen, P3-5), and any
+`copier update` run without the flag would re-render each changed line with
+`DemandForecastServing`, one release at a time.
+
+It is now an ordinary question with the PascalCase default, so `--defaults`
+behaves as before and the value — default or not — is recorded. The other
+derived casings stay `when: false`: they reach identifiers, and there the
+single-source rule above is the point. An existing service picks the answer up
+on its next `copier update`, which asks once (or takes `--data`) and records it.
 
 ### 2.4a Self-contained template root (vendoring + drift gate)
 

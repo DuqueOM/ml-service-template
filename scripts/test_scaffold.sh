@@ -263,6 +263,14 @@ if [[ -f "$ANSWERS_FILE" ]]; then
   else
     fail "Answers file lacks service_slug — answers were not persisted"
   fi
+  # service_name reaches display text and adopters override it; unrecorded,
+  # every `copier update` without the original --data re-renders it to the
+  # PascalCase default (ADR-030, amendment 2026-09-29).
+  if grep -qE '^service_name:' "$ANSWERS_FILE"; then
+    pass "Answers file records service_name (a custom display name survives copier update)"
+  else
+    fail "Answers file lacks service_name — a custom display name is lost on the next copier update"
+  fi
 else
   fail "Copier answers file MISSING — generated service has no 'copier update' path (ADR-003)"
 fi
