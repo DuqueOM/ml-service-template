@@ -181,7 +181,7 @@ flowchart TD
     B --> C["agentic/rules"]
     B --> D["agentic/skills"]
     B --> E["agentic/workflows"]
-    C --> F["generated adapters<br/>.claude/rules, .claude/skills, .cursor/rules, payload mirror"]
+    C --> F["one generated adapter per supported tool<br/>plus a byte-identical mirror in the payload"]
     D --> F
     E --> F
     F --> G["adapter sync check<br/>a drifted adapter fails CI"]
@@ -191,6 +191,17 @@ flowchart TD
     G --> J
     J --> K["what ships is what the gates allowed"]
 ```
+
+The diagram names no adapter directory on purpose. The first version of this
+page listed three, and within a week the template began rendering skills where
+Cursor and Codex actually look for them (ADR-027 §9) — the picture was wrong
+before anyone had changed a line of it. Which tools are supported, and how many
+files each receives, is an inventory: it changes whenever a tool does, so it
+lives in the adapter tree under
+[AGENTS.md § Multi-IDE Support](../AGENTS.md#multi-ide-support), where the
+coherence gate reconciles every count against the directories. A diagram draws
+the mechanism, which changes rarely; the inventory stays where a gate can see
+it.
 
 The same idea applies to the documentation you are reading. The coherence gate
 reconciles claims that appear in more than one document — the version, the
