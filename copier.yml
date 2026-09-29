@@ -69,10 +69,20 @@ _exclude:
   - "htmlcov"
 
 # ── Questions ────────────────────────────────────────────────────────────────
-# Single source of truth is `service_slug` (snake_case). The PascalCase,
-# kebab-case and UPPER_CASE forms are DERIVED, never prompted — this removes the
-# whole class of "the three casings disagree" defects the old sed scaffolder
-# could produce.
+# Single source of truth is `service_slug` (snake_case). The kebab-case and
+# UPPER_CASE forms are DERIVED, never prompted — they reach identifiers, DNS
+# names and constants, and deriving them removes the whole class of "the
+# casings disagree" defects the old sed scaffolder could produce.
+#
+# `service_name` is the exception, and it is asked (with the PascalCase of the
+# slug as its default) so that it is RECORDED. It reaches only display text —
+# docstrings, the API title, log lines, workflow and artifact labels — never an
+# identifier, so a human-readable value is safe. As a `when: false` question it
+# was never written to `.copier-answers.yml`: an adopter who passed
+# `--data service_name="Fraud Detection"` got that name once, and every later
+# `copier update` without the same flag re-rendered the name back to
+# `FraudDetection`, one template change at a time (ADR-030, amendment
+# 2026-09-29).
 
 service_slug:
   type: str
@@ -86,9 +96,8 @@ service_slug:
 
 service_name:
   type: str
-  help: "Service class name in PascalCase (derived from service_slug)"
+  help: "Service display name, used in titles and docstrings (default: PascalCase of service_slug)"
   default: "{@ service_slug.split('_') | map('capitalize') | join @}"
-  when: false
 
 service_kebab:
   type: str

@@ -15,6 +15,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Fixed — a custom `service_name` was used once and never recorded
+
+- `service_name` was `when: false`, like the derived casings, so it never
+  reached `.copier-answers.yml`. An adopter who generated with
+  `--data service_name="Demand Forecast Serving"` got that name once; a
+  regeneration from the answers file differed in 60 files, and every
+  `copier update` without the same flag would re-render changed lines with
+  `DemandForecastServing` (reported downstream by ml-platform's QA-4 round
+  fourteen, P3-5).
+- It is now an ordinary question with the same PascalCase default, so
+  `--defaults` renders exactly what it did and the value is recorded. It
+  reaches only display text; `service_kebab` and `service_upper`, which reach
+  identifiers, stay derived. ADR-030 §2.3 amended; `test_scaffold.sh` asserts
+  the answer is recorded.
+- Adopters: the next `copier update` asks for it once, with the default
+  offered. Pass `--data service_name="..."` if you had overridden it.
+
 ### Changed — Dependabot stops proposing ydata-profiling 4.13+, which cannot install beside matplotlib 3.11
 
 - ydata-profiling 4.13.0 through 4.18.4 all cap `matplotlib<=3.10`. The EDA
