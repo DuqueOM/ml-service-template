@@ -38,7 +38,7 @@ dependencies = [
     "joblib ~= 1.6.0",
     # Serving
     "fastapi ~= 0.141.1",
-    "uvicorn ~= 0.53.0",
+    "uvicorn ~= 0.54.0",
     "pydantic ~= 2.13.5",
     # Data Validation
     "pandera ~= 0.33.1",
