@@ -1,7 +1,8 @@
 # ADR-028 — LLM-Assist Integration for Template Maintenance and Day-2 Operations
 
 - **Status**: Accepted
-- **Date**: 2026-06-09 (proposed) · 2026-06-10 (accepted in `v0.18.0`)
+- **Date**: 2026-06-09 (proposed) · 2026-06-10 (accepted in `v0.18.0`) · amended 2026-09-29
+  (where the local agent core lives — see the amendment at the end)
 - **Acceptance note**: accepted as written — including its §4 recommendation
   *against* fine-tuning dedicated models at this scale. The local-model plane
   is realized in the sibling repo
@@ -11,7 +12,8 @@
 - **Related**: ADR-001 (scope boundaries), ADR-010 (dynamic behavior),
   ADR-018 (memory plane), ADR-019 (CI self-healing), ADR-037 (dual-namespace
   retrieval separation — governs Lane 2's new pedagogical-RAG sibling, L-2b),
-  `templates/config/model_routing_policy.yaml`, README §Model routing policy.
+  `templates/config/model_routing_policy.yaml`, `docs/agentic/model-routing.md`
+  (formerly README §Model routing policy).
 
 ## 1. Context
 
@@ -127,3 +129,32 @@ lifecycle and audience).
 - The unified execution plan for both planes is
   [`docs/audit/ACTION_PLAN_LLM_AGENT.md`](../audit/ACTION_PLAN_LLM_AGENT.md); the
   local-model architecture decisions are `agent-local/docs/decisions/ADR-001..005`.
+
+## Amendment, 2026-09-29 — the local agent core moved, and this template is not where it lives
+
+**Status: Accepted.** The decision above stands: the routing policy, its
+escalation-only discipline, and the recommendation against fine-tuning are
+unchanged. What changed is §6's description of *where* the local-model tiers
+are implemented. It is left as written, because it was true when accepted; this
+amendment records what is true now.
+
+§6 says `agent-local` is "kept deliberately separate from this template" as
+the home of the local-model tiers. Since then:
+
+- The agent core was migrated, with its history, into
+  [`ml-platform`](https://github.com/DuqueOM/ml-platform) — ml-platform
+  ADR-002, *Absorbing `agent-local` with history*.
+- ml-platform ADR-010 makes its `libs/llm-core` the **authoritative** agent
+  core. `agent-local` stays public and unarchived, but as a one-way export of
+  that core; measured by ml-platform on 2026-09-23, the two had already
+  diverged in behaviour, not only in packaging.
+
+Consequences for this template:
+
+- The local-model tiers are still an operator's choice for the day-2
+  maintenance lanes, registered below the cheapest cloud tier. Nothing in a
+  generated service depends on them, before or after this amendment.
+- References that present `agent-local` as this template's LLM plane were
+  corrected in the README and moved, with the rest of the routing policy, to
+  [`docs/agentic/model-routing.md`](../agentic/model-routing.md#local-model-plane).
+- `docs/audit/ACTION_PLAN_LLM_AGENT.md` is a dated plan and is not rewritten.
