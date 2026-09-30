@@ -1,38 +1,52 @@
 """Contract test for R4 audit finding C1 — cadence-anticipated model names.
 
-Three invariants:
+R4 found a model-routing table that presented anticipated model names
+(``gpt-5.x``, ``gemini-3.x``) as if a vendor had verified them. The fix was a
+disclaimer and a verification procedure; this test keeps both attached to the
+names, wherever the names are.
 
-1. **Section heading flagged** — `README.md` § "Recommended baseline" no longer
-   carries the misleading "(verified 2026-04)" suffix; instead it reads
-   "(cadence-anticipated, **NOT** vendor-verified)".
+WHERE THE NAMES LIVE
+--------------------
+Until the README restructure the routing table was a README section, and this
+test read ``README.md`` § "Model routing policy" and nothing else. The table
+now lives in ``docs/agentic/model-routing.md``. Re-pointing the test at the new
+file would have repeated the defect it was written against in a new shape: a
+control that guards one location, while the thing it guards can be pasted
+anywhere. So it no longer names a file. It sweeps every live document —
+the same set ``scripts/check_doc_coherence.py`` reconciles, imported rather
+than re-derived — and every document that carries a speculative name must also
+carry the disclaimer and the verification procedure.
 
-2. **Disclaimer banner present** — whenever speculative model name patterns
-   (``gpt-5.<digit>`` / ``gemini-3.<digit>``) appear in the model-routing section,
-   the section MUST also contain the canonical disclaimer phrase
-   "cadence-anticipated" AND a reference to "Verifying model availability
-   before adoption" so adopters cannot mistake these names for verified.
+Invariants, per document that carries a speculative name:
 
-3. **Verification subsection exists** — the README contains the
-   "Verifying model availability before adoption" subsection with provider
-   dashboard links for OpenAI, Anthropic, and Google. Removing this
-   subsection while speculative names are still present is blocked by
-   this test.
+1. **No "verified" claim** — the misleading ``(verified 2026-04)`` suffix is
+   absent, and the document declares the names ``cadence-anticipated``.
+2. **Disclaimer present** — both canonical disclaimer phrases appear.
+3. **Verification procedure present** — the "Verifying model availability
+   before adoption" subsection links all three provider catalogues.
 
-These invariants together prevent silent regression of the R4-C1 finding:
-"the model routing table presents anticipated names as if verified".
+Plus two that stop the sweep from passing on nothing:
+
+4. At least one live document carries the routing table. If the table is
+   deleted or moved outside the swept set, the test fails instead of reporting
+   a vacuous pass.
+5. ``README.md`` links to the routing document, so an adopter can find it.
 
 Authority: R4 audit C1, ADR-020, ACTION_PLAN_R4 §S0-1.
 """
 
 from __future__ import annotations
 
+import importlib.util
 import re
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 README = REPO_ROOT / "README.md"
+ROUTING_DOC = REPO_ROOT / "docs" / "agentic" / "model-routing.md"
 
 # Patterns that count as "speculative / cadence-anticipated".
 SPECULATIVE_PATTERNS = [
@@ -40,97 +54,91 @@ SPECULATIVE_PATTERNS = [
     re.compile(r"gemini-3\.\d"),
 ]
 
-# Phrases that MUST appear when any speculative pattern is in the section.
+# Phrases that MUST appear in any document carrying a speculative name.
 REQUIRED_DISCLAIMER_PHRASES = [
     "cadence-anticipated",
     "Verifying model availability before adoption",
 ]
 
-# Section bounds — the model-routing block is delimited by these headings.
-SECTION_START = "## Model routing policy"
-SECTION_END_CANDIDATES = ["## Anti-patterns encoded", "---\n\n## Anti-patterns encoded"]
+REQUIRED_DASHBOARDS = [
+    "platform.openai.com/docs/models",
+    "docs.anthropic.com",
+    "ai.google.dev",
+]
 
 
-@pytest.fixture(scope="module")
-def readme_text() -> str:
-    assert README.exists(), f"README.md not found at {README}"
-    return README.read_text(encoding="utf-8")
-
-
-@pytest.fixture(scope="module")
-def model_routing_section(readme_text: str) -> str:
-    """Extract the §"Model routing policy" section from the README."""
-    start = readme_text.find(SECTION_START)
-    assert start != -1, f"README is missing the '{SECTION_START}' heading"
-    # Find the next top-level section after start.
-    end = -1
-    for candidate in SECTION_END_CANDIDATES:
-        end = readme_text.find(candidate, start + len(SECTION_START))
-        if end != -1:
-            break
-    assert end != -1, "Could not locate the end of the §'Model routing policy' section"
-    return readme_text[start:end]
-
-
-def test_section_heading_no_longer_claims_verified(model_routing_section: str) -> None:
-    """Invariant 1: the misleading '(verified 2026-04)' heading must be gone.
-
-    R4 audit C1 explicitly flagged this string as "presents anticipated names
-    as if verified". The honest replacement is "(cadence-anticipated, NOT
-    vendor-verified)".
-    """
-    assert "(verified 2026-04)" not in model_routing_section, (
-        "README still claims the model routing baseline is 'verified' — R4 finding "
-        "C1 requires this heading to read 'cadence-anticipated, NOT vendor-verified'. "
-        "See docs/audit/ACTION_PLAN_R4.md §S0-1."
+def _load_coherence_gate() -> ModuleType:
+    spec = importlib.util.spec_from_file_location(
+        "_check_doc_coherence", REPO_ROOT / "scripts" / "check_doc_coherence.py"
     )
-    assert "cadence-anticipated" in model_routing_section.lower() or "Cadence-anticipated" in model_routing_section, (
-        "Section heading must declare cadence-anticipated status. See docs/audit/ACTION_PLAN_R4.md §S0-1."
-    )
+    assert spec and spec.loader, "scripts/check_doc_coherence.py could not be loaded"
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
-def test_speculative_names_carry_disclaimer(model_routing_section: str) -> None:
-    """Invariant 2: when speculative names appear, the section MUST also
-    carry the canonical disclaimer phrases.
-
-    If a future contributor swaps the speculative names for verified ones
-    AND removes the disclaimer, this test passes (no speculative names →
-    disclaimer not required). If they keep speculative names but drop
-    the disclaimer, this test fails.
-    """
-    has_speculative = any(p.search(model_routing_section) for p in SPECULATIVE_PATTERNS)
-    if not has_speculative:
-        pytest.skip("No speculative model names in the section — disclaimer not required.")
-
-    for phrase in REQUIRED_DISCLAIMER_PHRASES:
-        assert phrase in model_routing_section, (
-            f"Speculative model names are present in §'Model routing policy' but the required "
-            f"disclaimer phrase {phrase!r} is missing. See docs/audit/ACTION_PLAN_R4.md §S0-1."
-        )
-
-
-def test_verification_subsection_lists_three_providers(model_routing_section: str) -> None:
-    """Invariant 3: the verification subsection MUST link to all three
-    provider dashboards (OpenAI, Anthropic, Google).
-
-    Adopters need a single, unambiguous instruction: where to verify each
-    name. A subsection that mentions only one provider would leave the
-    other two cells of the table unverifiable.
-    """
-    has_speculative = any(p.search(model_routing_section) for p in SPECULATIVE_PATTERNS)
-    if not has_speculative:
-        pytest.skip("No speculative names — no verification subsection required.")
-
-    assert "Verifying model availability before adoption" in model_routing_section, (
-        "Section must include the 'Verifying model availability before adoption' subsection."
-    )
-
-    required_dashboards = [
-        "platform.openai.com/docs/models",
-        "docs.anthropic.com",
-        "ai.google.dev",
+def _documents_with_speculative_names() -> list[Path]:
+    gate = _load_coherence_gate()
+    return [
+        doc
+        for doc in gate.live_documents(REPO_ROOT)
+        if any(p.search(doc.read_text(encoding="utf-8")) for p in SPECULATIVE_PATTERNS)
     ]
-    for dashboard in required_dashboards:
-        assert dashboard in model_routing_section, (
-            f"Verification subsection must link to {dashboard!r}. See docs/audit/ACTION_PLAN_R4.md §S0-1."
+
+
+CARRIERS = _documents_with_speculative_names()
+
+
+def _rel(path: Path) -> str:
+    return path.relative_to(REPO_ROOT).as_posix()
+
+
+def test_the_routing_table_is_somewhere_the_sweep_can_see() -> None:
+    """Invariant 4: the sweep must find the table, or it proves nothing."""
+    assert CARRIERS, (
+        "No live document carries a speculative model name, so every other invariant here "
+        "would pass on nothing. If the routing table was deliberately rewritten to verified "
+        "names, delete this test with a note in ADR-020; if it moved, move it back into docs/."
+    )
+    assert ROUTING_DOC in CARRIERS, (
+        f"The routing table is expected in {_rel(ROUTING_DOC)}; found in {[_rel(p) for p in CARRIERS]}"
+    )
+
+
+@pytest.mark.parametrize("doc", CARRIERS, ids=_rel)
+def test_no_verified_claim(doc: Path) -> None:
+    """Invariant 1: anticipated names are never labelled as verified."""
+    text = doc.read_text(encoding="utf-8")
+    assert "(verified 2026-04)" not in text, (
+        f"{_rel(doc)} labels the model baseline 'verified' — R4 finding C1 requires "
+        "'cadence-anticipated, NOT vendor-verified'. See docs/audit/ACTION_PLAN_R4.md §S0-1."
+    )
+    assert "cadence-anticipated" in text.lower(), f"{_rel(doc)} must declare the names cadence-anticipated."
+
+
+@pytest.mark.parametrize("doc", CARRIERS, ids=_rel)
+def test_speculative_names_carry_disclaimer(doc: Path) -> None:
+    """Invariant 2: a speculative name never travels without its disclaimer."""
+    text = doc.read_text(encoding="utf-8")
+    for phrase in REQUIRED_DISCLAIMER_PHRASES:
+        assert phrase in text, (
+            f"{_rel(doc)} carries speculative model names but not the disclaimer phrase {phrase!r}. "
+            "See docs/audit/ACTION_PLAN_R4.md §S0-1."
         )
+
+
+@pytest.mark.parametrize("doc", CARRIERS, ids=_rel)
+def test_verification_procedure_lists_three_providers(doc: Path) -> None:
+    """Invariant 3: the adopter is told where to verify each name."""
+    text = doc.read_text(encoding="utf-8")
+    for dashboard in REQUIRED_DASHBOARDS:
+        assert dashboard in text, (
+            f"{_rel(doc)} must link {dashboard!r} in its verification procedure. "
+            "See docs/audit/ACTION_PLAN_R4.md §S0-1."
+        )
+
+
+def test_readme_links_the_routing_document() -> None:
+    """Invariant 5: the README is where an adopter starts; it must point here."""
+    readme = README.read_text(encoding="utf-8")
+    assert "docs/agentic/model-routing.md" in readme, "README.md must link docs/agentic/model-routing.md"

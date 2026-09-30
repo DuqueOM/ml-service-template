@@ -15,6 +15,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Changed — the README is a front door again, and four of its claims were false
+
+- The quick start was at line 809 of 980; it is now at line 62. The README went from 980 lines to 660 without deleting
+  content: model routing, the Operational Memory Plane design and the CI self-healing design moved to
+  `docs/agentic/model-routing.md`, `docs/agentic/memory-plane.md` and `docs/agentic/ci-self-healing.md`; the release
+  summaries it carried ("Recent hardening", last updated for v0.15.3) are the CHANGELOG's job and now link here.
+- **Fixed, repository structure.** The README drew a tree of `templates/` directories that ADR-030 removed — seven of
+  them, months after the move. It was a code block, and nothing checks a line of a drawn tree. The map is now
+  `docs/REPOSITORY_STRUCTURE.md`, written as code-span paths so `check_doc_path_refs.py` fails CI when one stops
+  resolving (verified with a seeded bad path).
+- **Fixed, companion repositories.** ml-platform, which consumes this template, was not listed. `agent-local` was
+  described as this template's separate LLM plane; its core moved into ml-platform, which is authoritative
+  (ml-platform ADR-002, ADR-010). ADR-028 carries a dated amendment rather than a rewrite.
+- **Fixed, capability claims.** "Controlled CI self-healing for low-risk failures" was listed as a core capability
+  while the lane is shadow-only and writes nothing. The architecture diagram drew the Operational Memory Plane as a
+  live flow; its edges are now dashed and labelled roadmap. The Python badge said 3.11 | 3.12 while CI tests 3.13 and
+  the image is `python:3.13-slim`.
+- **Fixed, hand-written counts.** Status banners claimed "10 policy-contract invariants" (there are 11) and a
+  "13-class" redaction pipeline (13 secret and 5 PII patterns). Both now name the test files instead of a number
+  nothing reconciles.
+- **Controls follow the content.** `test_readme_model_names.py` read one README section; it now sweeps every live
+  document — the set `check_doc_coherence.live_documents()` defines, imported rather than copied — so speculative
+  model names cannot be pasted anywhere without their disclaimer (verified: a name appended to `docs/ADOPTION.md`
+  fails 3 invariants the old test never saw). `test_phase0_disclosure.py` also holds the two new design pages to the
+  phase their ADR declares.
+
 ## [v0.31.0] - 2026-09-29
 
 Bump level: **MINOR**. `service_name` is recorded (#254): the rendered answers

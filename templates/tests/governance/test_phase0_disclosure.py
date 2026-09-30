@@ -41,6 +41,13 @@ README = REPO_ROOT / "README.md"
 ADR_018 = REPO_ROOT / "docs" / "decisions" / "ADR-018-operational-memory-plane.md"
 ADR_019 = REPO_ROOT / "docs" / "decisions" / "ADR-019-agentic-ci-self-healing.md"
 
+# The full target design of each capability lives in its own document; the
+# README keeps the status banner and a link. A reader who lands on the detail
+# page from a search or a link never passes through the README, so the page
+# must carry the same disclosure. Both surfaces are held to the ADR's phase.
+MEMORY_DOC = REPO_ROOT / "docs" / "agentic" / "memory-plane.md"
+SELF_HEALING_DOC = REPO_ROOT / "docs" / "agentic" / "ci-self-healing.md"
+
 MEMORY_HEADING = "## Operational Memory Plane"
 SELF_HEALING_HEADING = "## Agentic CI self-healing"
 
@@ -240,4 +247,30 @@ def test_maturity_matrix_row_not_production_ready(readme_text: str, adr: Path, r
     assert "production-ready" not in row.lower(), (
         f"Maturity matrix row for {row_key!r} claims production-ready while "
         f"{adr.name} has not declared its runtime live."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Invariant 5 — the detail page discloses, and agrees with the ADR's phase.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("adr", "doc", "label"),
+    [
+        (ADR_018, MEMORY_DOC, "ADR-018"),
+        (ADR_019, SELF_HEALING_DOC, "ADR-019"),
+    ],
+    ids=["ADR-018", "ADR-019"],
+)
+def test_detail_page_discloses_and_matches_phase(adr: Path, doc: Path, label: str) -> None:
+    if _runtime_is_live(adr):
+        pytest.skip(f"{label} declares its runtime live; detail-page disclosure no longer required.")
+    body = _read(doc)
+    banner = body[: body.find("\n## ")] if "\n## " in body else body
+    _assert_discloses(banner, f"{doc.relative_to(REPO_ROOT)} (above its first section)", label)
+    phase = _declared_phase(adr)
+    assert re.search(rf"phase\s+{phase}\b", banner, re.IGNORECASE), (
+        f"{doc.relative_to(REPO_ROOT)} does not state 'Phase {phase}' above its first section, "
+        f"but {adr.name} declares Phase {phase}."
     )

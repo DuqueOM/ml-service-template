@@ -242,10 +242,21 @@ def _states_current_surface(path: Path, root: Path) -> bool:
     return not (rel.parts[0] == "docs" and rel.parts[1] in _RECORD_DIRS)
 
 
-def _surface_claim_docs(root: Path) -> list[Path]:
-    """Every live document under `root` that could restate the surface counts."""
+def live_documents(root: Path) -> list[Path]:
+    """Every live document under `root`: root-level and `docs/` Markdown, minus dated records.
+
+    Public because more than one control needs the same answer to "which
+    documents describe the tree as it is now". A second copy of this rule in a
+    test would drift from this one, and the two would then disagree about
+    whether a file is a record.
+    """
     candidates = sorted(root.glob("*.md")) + sorted((root / "docs").rglob("*.md"))
     return [p for p in candidates if p.is_file() and _states_current_surface(p, root)]
+
+
+def _surface_claim_docs(root: Path) -> list[Path]:
+    """Every live document under `root` that could restate the surface counts."""
+    return live_documents(root)
 
 
 def _reconcile_surface(doc_path: Path, rules_dir: Path, label: str) -> list[str]:
