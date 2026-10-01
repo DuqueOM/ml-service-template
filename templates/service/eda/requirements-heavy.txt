@@ -10,6 +10,6 @@
 # explicitly so the dependency is a decision rather than a side effect.
 matplotlib~=3.11
 ydata-profiling~=4.6
-plotly~=7.0
+plotly~=7.1
 seaborn~=0.13
 great-tables~=1.0
