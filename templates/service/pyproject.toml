@@ -67,7 +67,7 @@ dev = [
     "pytest-cov ~= 7.1.0",
     "locust ~= 2.46.6",
     "httpx ~= 0.28.1",
-    "jsonschema ~= 4.23.0",
+    "jsonschema ~= 4.26.0",
     # ADR-044 replaced black + isort + flake8 with ruff. All three stayed
     # declared here, so every generated service installed three linters it
     # never runs — and did not declare the one it does. Dependabot noticed
