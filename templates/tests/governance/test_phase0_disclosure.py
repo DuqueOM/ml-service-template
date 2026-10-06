@@ -48,11 +48,17 @@ ADR_019 = REPO_ROOT / "docs" / "decisions" / "ADR-019-agentic-ci-self-healing.md
 MEMORY_DOC = REPO_ROOT / "docs" / "agentic" / "memory-plane.md"
 SELF_HEALING_DOC = REPO_ROOT / "docs" / "agentic" / "ci-self-healing.md"
 
-MEMORY_HEADING = "## Operational Memory Plane"
-SELF_HEALING_HEADING = "## Agentic CI self-healing"
+# The README follows docs/governance/readme-standard.md (shared with
+# ml-platform), whose fixed level-2 sections replaced the four this test used
+# to read. Each disclosure moved WITH its surface rather than being dropped:
+# the hero list is now "What it is", the maturity matrix heads "What you get",
+# and the two status banners are level-3 sections inside it. Same four
+# surfaces, same assertions.
+MEMORY_HEADING = "### Operational Memory Plane"
+SELF_HEALING_HEADING = "### Agentic CI self-healing"
 
-HERO_HEADING = "## What this template is"
-MATRIX_HEADING = "## Production-ready scope"
+HERO_HEADING = "## What it is"
+MATRIX_HEADING = "## What you get"
 
 # Phrases in an ADR Status line that mean "the runtime actually ships now".
 # Only these lift the disclosure requirement.
