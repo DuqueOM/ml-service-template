@@ -31,6 +31,18 @@ Every ADR MUST include:
 
 Use template: `templates/service/docs/decisions/adr-template.md`
 
+## Repository README Standard
+
+**Applies to the two template repositories themselves — ml-service-template and
+ml-platform — not to a generated service**, whose README follows the Service
+README Standards below. Their root `README.md` follows
+`docs/governance/readme-standard.md` — one file, identical in both — and
+`scripts/check_readme.py` enforces it in CI: ten fixed
+sections in order, a 250-line / 2,000-word budget, badges that report checks,
+and a status block generated from the repository's sources of truth. Never type
+a number into that block; change its source and run
+`scripts/check_readme.py --write`.
+
 ## Service README Standards
 
 Every service README MUST include:

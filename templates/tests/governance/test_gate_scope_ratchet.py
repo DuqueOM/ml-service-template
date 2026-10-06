@@ -74,6 +74,9 @@ SCOPE: dict[str, tuple[str, int, str]] = {
     # nobody read. It goes back up only if new findings are accepted.
     "check_baselines_expiry": (r"OK — (\d+) entr", 7, "baseline entries checked"),
     "check_adopter_scaffold_ref": (r"\] (\d+) adopter scaffold command", 4, "commands checked"),
+    # The README standard's ten sections, every one compared in order. A
+    # standard whose section list emptied would compare nothing and pass.
+    "check_readme": (r"OK — (\d+) sections in order", 10, "README sections checked"),
     "check_service_adr_references": (r"\] (\d+) template ADRs referenced", 42, "ADR references"),
     "check_template_render_safety": (r"OK — (\d+) files under", 400, "payload files parsed"),
     "check_payload_test_scope": (r"OK — (\d+) payload tests", 46, "payload tests checked"),

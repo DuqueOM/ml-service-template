@@ -15,6 +15,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Changed — the README follows a standard shared with ml-platform, and its status is generated
+
+- **One README standard for both templates.** `docs/governance/readme-standard.md` — byte-identical in ml-platform —
+  fixes ten sections in one order (status, what it is, quick start, what you get, architecture, how claims are
+  verified, documentation, related repositories, contributing/security/support, licence), a budget of 250 lines and
+  2,000 words, and badges that report checks. It draws on GitHub's guidance on READMEs, the standard-readme
+  convention and the Diátaxis split this repository already cites in rule 16. Rule 06 points to it.
+- **The README went from 660 lines and 5,700 words to under 200 lines and 1,800 words.** Nothing was deleted: the
+  capability lists, technology stack, agentic system, full anti-pattern table, comparison with Made With ML,
+  Cookiecutter Data Science, ZenML and Kubeflow, release flow, Argo Rollouts and scope boundaries moved verbatim to
+  `docs/CAPABILITIES.md`, links rewritten for its location. Badges that stated claims nothing checked — Terraform,
+  Kubernetes, "use as template", "agentic", and a Codecov badge keyed to the pre-rename slug — are gone; the
+  anti-pattern badge stays because `test_readme_verification_status.py` holds its number to the catalogue.
+- **The status is generated, not typed.** `scripts/check_readme.py` (CI: `validate-templates.yml`, and `make verify`)
+  writes the README's status block from `VERSION` and its dated CHANGELOG heading, the production column of the
+  adoption matrix, the anti-pattern catalogue, the verification lanes that exist, and the latest `VALIDATION_LOG.md`
+  entry, and fails when the committed block differs. It also fails a missing or reordered section, an extra one, a
+  claim badge, a quick start over five commands, and a README over budget — each watched failing in
+  `templates/tests/governance/test_readme_standard.py`. The quick start installs Copier exactly as CI's scaffold
+  lanes do (`copier>=9.0.0`) instead of an unbounded `pip install copier`.
+- **Every existing README contract still holds, against the new structure.** `test_phase0_disclosure.py` reads the
+  same four surfaces under their new headings (the hero is "What it is", the matrix heads "What you get", the two
+  banners are level-3 sections inside it), with the same assertions; `test_adoption_boundary_contract.py` accepts
+  the adoption section at level 3. The status block also shows that the latest execution record (Entry 020,
+  v0.26.0) is five releases behind `VERSION` — a fact the README never surfaced while it was typed.
+
 ### Changed — the README is a front door again, and four of its claims were false
 
 - The quick start was at line 809 of 980; it is now at line 62. The README went from 980 lines to 660 without deleting

@@ -181,6 +181,7 @@ GATES := \
 	check_baselines_expiry \
 	check_gitleaks_pin \
 	check_adopter_scaffold_ref \
+	check_readme \
 	check_service_adr_references \
 	check_template_render_safety \
 	check_payload_test_scope \

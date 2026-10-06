@@ -185,7 +185,9 @@ def test_readme_links_to_adoption_doc() -> None:
     )
     # The link must live under an explicit Adoption section so it isn't
     # buried in passing references.
-    assert re.search(r"^##\s+Adoption\s+boundary", readme, re.MULTILINE), (
+    # A level-3 section inside "What it is" since the README adopted the shared
+    # standard's fixed level-2 sections; the pointer and its section stay.
+    assert re.search(r"^#{2,3}\s+Adoption\s+boundary", readme, re.MULTILINE), (
         "PR-R2-12 violation: README.md is missing the `## Adoption boundary` "
         "section header. The link to ADOPTION.md must live under that section."
     )

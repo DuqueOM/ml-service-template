@@ -63,6 +63,14 @@ jobs:
       - name: Adopter scaffold command pins the current release
         run: python3 scripts/check_adopter_scaffold_ref.py
 
+      # The README follows docs/governance/readme-standard.md, the same file in
+      # ml-platform: fixed sections, a length budget, badges that report checks,
+      # and a status block generated from VERSION, CHANGELOG.md, the adoption
+      # matrix, AGENTS.md, the verification lanes and VALIDATION_LOG.md. It had
+      # grown to 5,700 words with those facts typed by hand.
+      - name: README follows the shared standard; its status is generated
+        run: python3 scripts/check_readme.py
+
       - name: Generated service ADR references are resolvable
         run: python3 scripts/check_service_adr_references.py
 
