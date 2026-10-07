@@ -15,6 +15,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Fixed — the README check reads Markdown as GitHub renders it, and its quick-start rules deny by default
+
+ml-platform's QA-4 round eighteen audited the shared README standard again.
+
+- **The parser still read lines.** An image in the title line, a reference definition inside a blockquote, with its
+  URL on the next line or with different label whitespace, and commands in `<pre>` or in a fence indented under a
+  list item all passed. `scripts/readme_standard.py` (byte-identical in ml-platform) is now CommonMark's own block
+  algorithm — containers, lazy lines, the seven HTML block kinds, multi-line reference definitions — with an inline
+  pass that reads code spans, escapes and brackets in CommonMark's order, and GitHub's tables. Where markdown-it and
+  GitHub disagree it follows GitHub, checked case by case against `gh api /markdown`.
+- **`unpinned()` was an allowlist of installer spellings that passed everything else** — `python3.12 -m pip`,
+  `uv tool install`, `@latest`, `>=0`, `sudo bash`, other package managers. A quick-start command now passes only when
+  a rule reads it and finds what it runs pinned. A range passes only when this repository's CI installs exactly that
+  range, read from `.github/workflows/` (the quick start's `copier>=9.0.0` is the scaffold lanes' own line).
+- **The cross-repository pin ran only where both repositories were checked out.** ml-platform's CI now checks this
+  repository's two files out at a pinned commit and compares them byte for byte on every run.
+
 ### Fixed — the README check reads Markdown, and the standard cannot drift between the two repositories
 
 ml-platform's QA-4 round seventeen audited this repository's half of the shared README standard (#265).
