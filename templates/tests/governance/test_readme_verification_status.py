@@ -51,6 +51,26 @@ def test_readme_exists() -> None:
     assert README.exists(), f"README not found at {README}"
 
 
+#: Every document that carries the README's capability claims. The detail
+#: moved to docs/CAPABILITIES.md when the README adopted the shared standard
+#: (#265), and this guard went on reading README.md alone — an unqualified
+#: `Production-ready` cell planted there passed (QA-4 round seventeen, of
+#: ml-platform, reading this repository).
+CLAIM_SURFACES = (README, REPO_ROOT / "docs" / "CAPABILITIES.md")
+
+
+@pytest.mark.parametrize("surface", CLAIM_SURFACES, ids=lambda path: path.name)
+def test_every_claim_surface_qualifies_production_ready(surface: Path) -> None:
+    """The R5-H1 wording rule, on every surface that now carries the claims."""
+    text = surface.read_text(encoding="utf-8")
+    bad = [
+        f"| Production-ready{m.group('tail')} ..."
+        for m in re.finditer(r"\|\s*Production-ready(?!-)(?P<tail>[^|]{0,60})", text)
+        if not m.group("tail").lstrip().startswith("by design")
+    ]
+    assert not bad, f"{surface.name} has unqualified `Production-ready` status cells:\n  - " + "\n  - ".join(bad)
+
+
 def test_status_column_uses_production_ready_by_design(readme_text: str) -> None:
     """Every status cell that says 'Production-ready' must be qualified
     with ``by design``. The qualifier is the whole point of R5-H1.

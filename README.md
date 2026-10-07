@@ -61,12 +61,16 @@ policies.
 ## Quick start
 
 ```bash
-git clone https://github.com/DuqueOM/ml-service-template.git && cd ml-service-template
-make bootstrap && make demo-minimal        # tooling, then the minimal example: train, serve, check drift
-pip install "copier>=9.0.0"                # exactly what CI's scaffold lanes install
-copier copy --vcs-ref=v0.31.0 https://github.com/DuqueOM/ml-service-template.git ../ChurnPredictor
-cd ../ChurnPredictor && pytest
+pip install "copier>=9.0.0"                 # exactly what CI's scaffold lanes install
+copier copy --vcs-ref=v0.31.0 https://github.com/DuqueOM/ml-service-template.git ChurnPredictor
+cd ChurnPredictor
+pip install -r requirements-dev.txt         # the generated service's own pins, as the smoke lane installs them
+pytest tests/test_fastapi_template_contract.py
 ```
+
+Copier asks for the service's snake_case name and the GitHub owner that will host it. The last command runs the
+generated service's FastAPI contract test, which the Scaffolder End-to-End job in `validate-templates.yml` runs on every
+PR.
 
 **`--vcs-ref` is required, not decorative.** Without it Copier resolves to the highest-sorting tag, and this
 repository keeps frozen `v1.0.0`–`v1.12.0` audit snapshots (ADR-014) beside the active `v0.x` line, so the bare
