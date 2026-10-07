@@ -87,14 +87,28 @@ Both READMEs carry this table exactly as written here.
 
 ## Enforcement
 
-Each repository runs a README check in CI that fails when:
+Each repository runs a README check in CI. Its logic lives in
+`scripts/readme_standard.py`, byte-identical in both repositories like this
+file; each repository's `scripts/check_readme.py` adds only its own status
+sources. It reads the README's structure the way CommonMark does — ATX, setext
+and HTML headings, headings nested in lists or quotes, inline, reference and
+HTML images, fenced and indented code — and fails when:
 
-- a required section is missing, renamed, out of order, or joined by another
-  level-2 section;
+- a required section is missing, renamed, out of order, joined by another
+  level-2 section in any spelling, or written as anything but an ATX `##` heading;
 - the status block is absent or differs from what the check generates now;
 - the related-repositories table differs from the one in this file;
-- a badge is not one of the allowed kinds, or there are more than six;
+- a badge is not one of the allowed kinds, sits outside the title area, or
+  there are more than the rule allows;
+- the quick start runs more commands than the rule allows — counting every
+  command a line chains with `&&`, `||`, `;` or a pipe — or installs or runs a
+  tool without a version, clones without naming a ref, or pipes into a shell;
 - the README exceeds the line or word budget.
 
-The check also regenerates the status block (`--write`), so keeping it current
-is one command, not an edit.
+Every limit is read from this file's text, not restated in the checker, and
+this file is pinned by its SHA-256 in `scripts/readme_standard.py`: an edit
+here fails both repositories until the pin is updated in both, which is what
+"shared byte for byte" means in practice.
+
+The check also regenerates the status block and the related table
+(`--write`), so keeping them current is one command, not an edit.

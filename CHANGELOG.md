@@ -15,6 +15,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Fixed — the README check reads Markdown, and the standard cannot drift between the two repositories
+
+ml-platform's QA-4 round seventeen audited this repository's half of the shared README standard (#265).
+
+- **The check read lines, not Markdown.** A setext heading, an indented ATX heading, an HTML `<h2>`, an unlinked claim
+  badge, a badge inside a section, twelve commands in an indented block or chained on one line — each passed. The
+  shared logic now lives in `scripts/readme_standard.py`, byte-identical in ml-platform (which holds it to
+  markdown-it-py's reading of an adversarial corpus); `scripts/check_readme.py` keeps only this repository's status
+  sources and its one gated badge, which is now matched on its whole URL.
+- **Its limits were constants, so the standard could change with every gate green.** They are read from
+  `docs/governance/readme-standard.md`, which both repositories pin by SHA-256; a test compares the standard and the
+  shared module with ml-platform's copies whenever both are checked out side by side.
+- **The quick start broke the standard it lives under.** It ran eight commands, two of them chained, and cloned
+  without naming a ref. It is now the five commands the Scaffolder End-to-End job runs — install Copier as CI
+  does, scaffold at the pinned release, install the service's dev requirements, run its FastAPI contract test —
+  verified end to end before it was written.
+- **The wording guard read README.md only**, while the detail it guarded had moved to `docs/CAPABILITIES.md`; an
+  unqualified `Production-ready` cell planted there passed. It reads both now.
+
 ### Changed — the README follows a standard shared with ml-platform, and its status is generated
 
 - **One README standard for both templates.** `docs/governance/readme-standard.md` — byte-identical in ml-platform —
