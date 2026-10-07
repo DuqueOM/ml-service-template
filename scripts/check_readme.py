@@ -44,6 +44,12 @@ AGENTS = REPO_ROOT / "AGENTS.md"
 VALIDATION_LOG = REPO_ROOT / "VALIDATION_LOG.md"
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 
+#: Where a reader would clone this repository from, and the branch whose README
+#: they are reading. The quick start renders a release tag and clones nothing,
+#: but the rules need both to tell this repository from any other.
+CLONE_URL = "https://github.com/DuqueOM/ml-service-template.git"
+DEFAULT_BRANCH = "main"
+
 #: The lanes that produce each evidence layer here, in order. A lane that stops
 #: existing drops out of the status, and the README says so on the next run.
 LANES = (
@@ -134,9 +140,34 @@ def status() -> str:
 # --- the checks: the shared half -------------------------------------------
 
 
+def _holds(path: str) -> bool:
+    """Whether ``path`` names a file in this checkout, relative to its root and without `..`."""
+    relative = Path(path)
+    if relative.is_absolute() or ".." in relative.parts:
+        return False
+    target = (REPO_ROOT / relative).resolve()
+    return target.is_relative_to(REPO_ROOT) and target.is_file()
+
+
+def repository() -> readme_standard.Repository:
+    """What the quick-start rules need to know about this repository, read from it.
+
+    The ranges its CI installs come from the workflows themselves: the quick
+    start's `copier>=9.0.0` passes because the scaffold lanes install exactly that.
+    """
+    workflows = sorted(WORKFLOWS.glob("*.yml")) + sorted(WORKFLOWS.glob("*.yaml"))
+    return readme_standard.Repository(
+        clone_url=CLONE_URL,
+        default_branch=DEFAULT_BRANCH,
+        ci_requirements=readme_standard.requirements_installed_by(p.read_text(encoding="utf-8") for p in workflows),
+        holds=_holds,
+    )
+
+
 def check(readme: str, standard: str, generated: str) -> list[str]:
     """One message per departure from the standard. Empty means the README conforms."""
-    return readme_standard.check(readme, standard, generated, tuple(pattern for pattern, _ in GATED_BADGES))
+    badges = tuple(pattern for pattern, _ in GATED_BADGES)
+    return readme_standard.check(readme, standard, generated, badges, repository=repository())
 
 
 def write(readme: str, generated: str, standard: str) -> str:

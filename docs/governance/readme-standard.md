@@ -90,9 +90,12 @@ Both READMEs carry this table exactly as written here.
 Each repository runs a README check in CI. Its logic lives in
 `scripts/readme_standard.py`, byte-identical in both repositories like this
 file; each repository's `scripts/check_readme.py` adds only its own status
-sources. It reads the README's structure the way CommonMark does — ATX, setext
-and HTML headings, headings nested in lists or quotes, inline, reference and
-HTML images, fenced and indented code — and fails when:
+sources. It reads the README the way CommonMark does — its block algorithm,
+with containers, lazy lines, HTML blocks and reference definitions inside
+containers or across lines, and GitHub's tables: ATX, setext and HTML headings,
+headings nested in lists or quotes, inline, reference and HTML (`src`, `srcset`)
+images in headings, paragraphs and table cells, and as code every fenced,
+indented or `<pre>` block wherever it is nested — and fails when:
 
 - a required section is missing, renamed, out of order, joined by another
   level-2 section in any spelling, or written as anything but an ATX `##` heading;
@@ -101,9 +104,35 @@ HTML images, fenced and indented code — and fails when:
 - a badge is not one of the allowed kinds, sits outside the title area, or
   there are more than the rule allows;
 - the quick start runs more commands than the rule allows — counting every
-  command a line chains with `&&`, `||`, `;` or a pipe — or installs or runs a
-  tool without a version, clones without naming a ref, or pipes into a shell;
+  command a line chains with `&&`, `||`, `;`, `&` or a pipe — or runs anything
+  the rules below do not find pinned;
 - the README exceeds the line or word budget.
+
+### What a quick-start command may run
+
+The check reads each command as a shell does — quotes, escapes, comments,
+redirections, subshells — and passes it only when one of these rules reads it
+and finds what it runs pinned. A command no rule reads fails and names itself:
+admitting a new kind of command is a change to `scripts/readme_standard.py`, in
+both repositories, together with the rule that pins it.
+
+- **Installs** (`pip`, `pip3.X`, `python3.X -m pip`, `uv pip`): every
+  requirement `==` an exact version, a VCS URL at a tag or a commit, or an
+  archive with its `#sha256=`. A range only when this repository's CI installs
+  exactly that range. A requirements file in the checkout is its own pin.
+- **Runners that fetch** (`uvx`, `uv tool`, `pipx`, `npx`, `npm install`): an
+  exact version — never `@latest`, never a range. `npm ci` installs the lock.
+- **A tool by name** (`pytest`, `copier`): inside `uv run`, which takes it from
+  the lock, or after an earlier quick-start command installed it pinned.
+- **Clones and renders**: `git clone` and `copier copy|update|recopy` name a
+  release tag or a commit. Two exceptions, both the reader's own checkout:
+  cloning this repository at its default branch — the branch whose README the
+  reader is reading, verified by CI at every merge — and rendering
+  `--vcs-ref HEAD` from a local template path.
+- **Scripts**: a shell or `python` runs a file this repository holds — never a
+  downloaded one, standard input, or inline code.
+- **Never**: a system package manager or downloader (`curl`, `wget`, `brew`,
+  `apt`, `conda`, `docker` and the like), or a command substitution.
 
 Every limit is read from this file's text, not restated in the checker, and
 this file is pinned by its SHA-256 in `scripts/readme_standard.py`: an edit

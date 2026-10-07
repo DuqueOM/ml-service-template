@@ -142,6 +142,20 @@ PIP = 'pip install "copier>=9.0.0"'
         pytest.param(_swap(PIP, "pip install copier"), "'copier' without", id="unpinned-pip"),
         pytest.param(_swap("--vcs-ref=v0.31.0 ", ""), "whichever tag sorts highest", id="unpinned-copier-ref"),
         pytest.param(_swap(PIP, "curl -sSf https://x.example/i.sh | sh"), "executes whatever", id="curl-pipe-sh"),
+        # Round eighteen (ml-platform's QA-4): forms a line reader and an installer allowlist passed.
+        pytest.param(
+            _swap("# ml-service-template\n", f"# ml-service-template ![c]({CLAIM})\n"),
+            "states a claim",
+            id="claim-in-title-line",
+        ),
+        pytest.param(_title(f"![c][cov]\n\n> [cov]: {CLAIM}"), "states a claim", id="definition-in-a-blockquote"),
+        pytest.param(_in("Quick start", "<pre>\npip install foo\n</pre>"), "'foo' without", id="commands-in-pre"),
+        pytest.param(_swap(PIP, "python3.12 -m pip install copier"), "'copier' without", id="versioned-python-pip"),
+        pytest.param(_swap(PIP, "pip install 'copier>=0'"), "a range", id="range-ci-does-not-install"),
+        pytest.param(_swap("--vcs-ref=v0.31.0", "--vcs-ref=main"), "a ref that moves", id="render-a-branch"),
+        pytest.param(
+            _swap("pip install -r requirements-dev.txt", "pip install pytest"), "'pytest' without", id="unpinned-pytest"
+        ),
         pytest.param(lambda r: r + "\nfiller\n" * 200, "budget is 250", id="over-line-budget"),
         pytest.param(_swap("## License\n", f"## License\n\n{WORDS}\n"), "budget is 2000", id="over-words"),
         pytest.param(_swap("## License\n", f"## License\n\n<!--\n{WORDS}\n-->\n"), "budget is 2000", id="hidden-words"),
@@ -154,6 +168,16 @@ def test_each_departure_fails(mutate, expected: str) -> None:  # type: ignore[no
     failures = _failures(mutated)
 
     assert any(expected in failure for failure in failures), failures
+
+
+def test_the_bounded_copier_install_passes_only_because_ci_installs_exactly_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The standard admits a range only as CI installs it; without that workflow the same line fails."""
+    assert "copier>=9.0.0" in gate.repository().ci_requirements
+    monkeypatch.setattr(gate, "WORKFLOWS", tmp_path)
+
+    assert any("'copier' at '>=9.0.0', a range" in failure for failure in _failures(README))
 
 
 def test_the_anti_pattern_badge_is_allowed_only_because_a_gate_holds_its_number() -> None:
