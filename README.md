@@ -15,7 +15,7 @@
      docs/ADOPTION.md, AGENTS.md, .github/workflows/ and VALIDATION_LOG.md.
      Edit those, then regenerate; never edit this block. -->
 
-**v0.31.0**, released 2026-09-29 — [CHANGELOG](CHANGELOG.md), [releases](releases/).
+**v0.32.0**, released 2026-10-08 — [CHANGELOG](CHANGELOG.md), [releases](releases/).
 
 **Production maturity, per capability: 39 ready · 3 partial · 5 roadmap** of 47, rated per cloud and environment in the
 [adoption matrix](docs/ADOPTION.md). **38 anti-patterns** encoded and contract-tested ([AGENTS.md](AGENTS.md)).
@@ -62,7 +62,7 @@ policies.
 
 ```bash
 pip install "copier>=9.0.0"                 # exactly what CI's scaffold lanes install
-copier copy --vcs-ref=v0.31.0 https://github.com/DuqueOM/ml-service-template.git ChurnPredictor
+copier copy --vcs-ref=v0.32.0 https://github.com/DuqueOM/ml-service-template.git ChurnPredictor
 cd ChurnPredictor
 pip install -r requirements-dev.txt         # the generated service's own pins, as the smoke lane installs them
 pytest tests/test_fastapi_template_contract.py
