@@ -73,7 +73,7 @@ dev = [
     # never runs — and did not declare the one it does. Dependabot noticed
     # before we did: it opened a PR bumping flake8.
     "ruff ~= 0.16.10",
-    "mypy ~= 2.3.1",
+    "mypy ~= 2.4.0",
     "bandit ~= 1.9.4",
     "pre-commit ~= 4.6.2",
 ]
