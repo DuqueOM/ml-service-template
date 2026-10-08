@@ -2,7 +2,7 @@
 scikit-learn         ~= 1.9.1
 pandas               ~= 3.0.6
 numpy                ~= 1.26.4
-fastapi              ~= 0.141.1
+fastapi              ~= 0.142.2
 uvicorn              ~= 0.54.0
 pydantic             ~= 2.13.5
 prometheus-client    ~= 0.26.0
