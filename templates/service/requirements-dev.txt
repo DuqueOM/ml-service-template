@@ -13,7 +13,7 @@
 
 pytest               ~= 9.1.1
 pytest-cov           ~= 7.1.0
-locust               ~= 2.46.6    # tests/load_test.py
+locust               ~= 2.46.7    # tests/load_test.py
 httpx                ~= 0.28.1    # FastAPI TestClient transport
 jsonschema           ~= 4.26.0    # scripts/validate_quality_gates.py + its test
 
