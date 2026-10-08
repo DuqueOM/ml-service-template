@@ -8,8 +8,20 @@
 # plotting library (verified by AST). matplotlib was declared in the base
 # lane and used by nothing; seaborn pulls it in anyway, and it is named
 # explicitly so the dependency is a decision rather than a side effect.
-matplotlib~=3.11
-ydata-profiling~=4.12
+#
+# The three pins below are one decision: the heavy set installs and RUNS on
+# the image's Python (3.13), which ydata-profiling 4.12 cannot — its htmlmin
+# dependency imports `cgi`, removed in 3.13, and it declares `<3.13`. 4.17 is
+# the first release without htmlmin that supports 3.13, and every release from
+# 4.13 caps `matplotlib<=3.10` — 3.10.0 exactly, which is what this resolves to.
+# ydata-profiling also imports `pkg_resources` without declaring setuptools,
+# which a 3.12+ venv no longer ships and setuptools 81 removed; without the pin
+# `ProfileReport` fails to import on every supported Python. CI installs this
+# set on 3.13 and builds a report (eda-heavy-smoke.yml), because resolving it
+# — all the dependency scan does — proved none of this.
+matplotlib~=3.10
+ydata-profiling~=4.17
+setuptools~=80.10
 plotly~=7.1
 seaborn~=0.13
 great-tables~=1.0
