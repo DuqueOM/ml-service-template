@@ -46,7 +46,7 @@ dependencies = [
     "shap ~= 0.49.1",
     # Monitoring
     "prometheus-client ~= 0.26.0",
-    "pyarrow ~= 18.0.0",
+    "pyarrow ~= 25.0.1",       # >= 23.0.1 for CVE-2026-25087
     "pyyaml ~= 6.0.3",
 ]
 

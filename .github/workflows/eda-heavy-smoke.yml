@@ -1,0 +1,77 @@
+---
+# EDA heavy-mode smoke — installs templates/service/eda/requirements-heavy.txt
+# on the Python the service image runs, and builds a profiling report with it.
+#
+# Why: the dependency scan only RESOLVES every requirements file, on the
+# runner's default Python. The heavy set resolved there for months while it
+# could not install on the image's Python 3.13 at all (ydata-profiling 4.12's
+# htmlmin imports `cgi`, removed in 3.13) and, even where it installed, could
+# not import (`pkg_resources`, which a 3.12+ venv no longer ships). Both were
+# found by ml-platform's QA-4 rounds seventeen and eighteen, not here.
+#
+# Mode (per AGENTS.md): AUTO. Read-only: nothing is published.
+#
+# Trigger surface:
+#   - PR: only when the EDA requirements, the image's base, or this file change.
+#   - Schedule: weekly, so an upstream release that breaks the set is caught
+#     before an adopter finds it.
+#   - Manual: workflow_dispatch.
+
+name: EDA Heavy-Mode Smoke
+
+on:
+  pull_request:
+    paths:
+      - "templates/service/eda/requirements*.txt"
+      - "templates/service/Dockerfile"
+      - ".github/workflows/eda-heavy-smoke.yml"
+  schedule:
+    # Tuesdays 04:10 UTC, beside the other weekly lanes.
+    - cron: "10 4 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  heavy-set-on-image-python:
+    name: Heavy EDA set installs and profiles on the image's Python
+    runs-on: ubuntu-latest
+    # A bound, not a budget: the set is ~500 MB of wheels; measured locally
+    # in under 2 minutes.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Read the Python the service image runs
+        id: image
+        run: |
+          version=$(sed -n 's/^FROM python:\([0-9]*\.[0-9]*\)-.*/\1/p' templates/service/Dockerfile | head -1)
+          test -n "$version" || { echo "::error::no python:X.Y base image in templates/service/Dockerfile"; exit 1; }
+          echo "python=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ steps.image.outputs.python }}
+
+      - name: Install the heavy set into a fresh venv
+        run: |
+          python -m venv /tmp/eda
+          /tmp/eda/bin/python -m pip install --quiet -r templates/service/eda/requirements-heavy.txt
+
+      - name: Build a profiling report with it
+        run: |
+          /tmp/eda/bin/python - <<'PY'
+          import os
+          import tempfile
+          import numpy as np
+          import pandas as pd
+          from ydata_profiling import ProfileReport
+
+          frame = pd.DataFrame({"x": np.arange(200), "y": np.random.default_rng(0).normal(size=200)})
+          out = os.path.join(tempfile.mkdtemp(), "report.html")
+          ProfileReport(frame, minimal=True, progress_bar=False).to_file(out)
+          size = os.path.getsize(out)
+          assert size > 10_000, f"the report is {size} bytes; nothing was profiled"
+          print(f"report: {size} bytes")
+          PY

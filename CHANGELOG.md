@@ -15,6 +15,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Security — pyarrow 25 in every generated requirement set (CVE-2026-25087)
+
+- `pyarrow ~= 18.0.0` sat inside CVE-2026-25087's range (fixed in 23.0.1) in the service's `requirements.txt`,
+  `pyproject.toml` and `eda/requirements.txt`, and so in every generated image. It is `~= 25.0.1` now, the
+  version ml-platform's workspace already runs; installed on the image's Python 3.13 beside the pinned
+  `numpy ~= 1.26.0` and `pandas ~= 2.3.3`, a parquet round trip through pandas is exact.
+
+### Fixed — the heavy EDA set installs and runs on the image's Python
+
+- `eda/requirements-heavy.txt` could not install on Python 3.13, the image's Python: ydata-profiling 4.12 depends
+  on htmlmin, whose build imports `cgi` (removed in 3.13), and declares `<3.13`. Where it did install it could not
+  import: ydata-profiling imports `pkg_resources` without declaring setuptools, which a 3.12+ venv does not ship.
+  The dependency scan only resolves requirement files, on the runner's Python 3.12, so neither showed. Found by
+  ml-platform's QA-4 rounds seventeen and eighteen (its R17-2).
+- The set is now ydata-profiling `~= 4.17` (the first release without htmlmin that supports 3.13), `matplotlib ~= 3.10`
+  (every ydata-profiling from 4.13 caps it at 3.10.0) and `setuptools ~= 80.10` (below 81, which removed
+  `pkg_resources`). The earlier choice of matplotlib 3.11 over newer ydata-profiling is reversed with this evidence;
+  Dependabot's ignore entries say why.
+- `eda-heavy-smoke.yml` installs the set on the Python the Dockerfile names and builds a profiling report —
+  weekly, and on any change to the EDA requirements. The previous set fails it with `ResolutionImpossible`.
+
 ### Fixed — the README check reads Markdown as GitHub renders it, and its quick-start rules deny by default
 
 ml-platform's QA-4 round eighteen audited the shared README standard again.
