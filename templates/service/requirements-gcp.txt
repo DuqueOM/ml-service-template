@@ -8,4 +8,4 @@
 # Before this file existed no image carried a cloud SDK at all, so every
 # staging/production lookup raised "required for GCP backend" and an
 # auth-enabled /predict could never succeed.
-google-cloud-secret-manager ~= 2.30.0
+google-cloud-secret-manager ~= 2.31.0
