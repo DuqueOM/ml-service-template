@@ -15,6 +15,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+## [v0.32.0] - 2026-10-08
+
+Bump level: **MINOR**. The generated `requirements.txt`, `pyproject.toml` and EDA requirement files change their
+pins — pyarrow to 25 for CVE-2026-25087, and the heavy EDA set to versions that install on the image's Python —
+which is changed scaffold output, so not a PATCH (§1.1); no §1.3 contract changes. Also the README standard shared
+with ml-platform (#265–#267). No `MIGRATION.md` entry: `copier update` brings the new pins, and nothing else needs
+a manual action.
+
 ### Security — pyarrow 25 in every generated requirement set (CVE-2026-25087)
 
 - `pyarrow ~= 18.0.0` sat inside CVE-2026-25087's range (fixed in 23.0.1) in the service's `requirements.txt`,

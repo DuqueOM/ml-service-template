@@ -112,6 +112,8 @@ def _reorder(readme: str) -> str:
 CHAINED = "```bash\npip install x==1 && " + " && ".join(["make x"] * 10) + "\n```"
 WORDS = "word " * 1500
 PIP = 'pip install "copier>=9.0.0"'
+#: The release the quick start pins, so these cases follow each release without an edit.
+RELEASE = "v" + (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
 
 
 @pytest.mark.parametrize(
@@ -140,7 +142,7 @@ PIP = 'pip install "copier>=9.0.0"'
         pytest.param(_in("Quick start", "\n".join(["    make step"] * 12)), "quick start runs", id="indented-commands"),
         pytest.param(_in("Quick start", CHAINED), "quick start runs", id="commands-chained-on-one-line"),
         pytest.param(_swap(PIP, "pip install copier"), "'copier' without", id="unpinned-pip"),
-        pytest.param(_swap("--vcs-ref=v0.31.0 ", ""), "whichever tag sorts highest", id="unpinned-copier-ref"),
+        pytest.param(_swap(f"--vcs-ref={RELEASE} ", ""), "whichever tag sorts highest", id="unpinned-copier-ref"),
         pytest.param(_swap(PIP, "curl -sSf https://x.example/i.sh | sh"), "executes whatever", id="curl-pipe-sh"),
         # Round eighteen (ml-platform's QA-4): forms a line reader and an installer allowlist passed.
         pytest.param(
@@ -152,7 +154,7 @@ PIP = 'pip install "copier>=9.0.0"'
         pytest.param(_in("Quick start", "<pre>\npip install foo\n</pre>"), "'foo' without", id="commands-in-pre"),
         pytest.param(_swap(PIP, "python3.12 -m pip install copier"), "'copier' without", id="versioned-python-pip"),
         pytest.param(_swap(PIP, "pip install 'copier>=0'"), "a range", id="range-ci-does-not-install"),
-        pytest.param(_swap("--vcs-ref=v0.31.0", "--vcs-ref=main"), "a ref that moves", id="render-a-branch"),
+        pytest.param(_swap(f"--vcs-ref={RELEASE}", "--vcs-ref=main"), "a ref that moves", id="render-a-branch"),
         pytest.param(
             _swap("pip install -r requirements-dev.txt", "pip install pytest"), "'pytest' without", id="unpinned-pytest"
         ),
