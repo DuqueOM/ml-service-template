@@ -201,7 +201,7 @@ jobs:
       #    `--skip-check` items must each carry a `# checkov:skip=` comment
       #    documenting the why next to the resource (NOT in the workflow).
       - name: Checkov (IaC + K8s + Dockerfile)
-        uses: bridgecrewio/checkov-action@5798bad4f6dd9c1fb67ae3ec10d42d8fb67037c4 # v12.3126.0
+        uses: bridgecrewio/checkov-action@7b1bd992e2c40a3404e3511944aeb8d014703d9a # v12.3129.0
         with:
           directory: templates/
           framework: terraform,kubernetes,dockerfile
