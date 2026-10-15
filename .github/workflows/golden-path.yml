@@ -147,7 +147,7 @@ jobs:
           # job had been red every week since 2026-05-11.
 
       - name: Upload scaffolded service for downstream jobs
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: scaffolded-service
           path: ${{ env.SERVICE_NAME }}/
@@ -171,7 +171,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Download scaffolded service
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: scaffolded-service
           path: ${{ env.SERVICE_NAME }}/
@@ -286,7 +286,7 @@ jobs:
             -o /tmp/image.tar
 
       - name: Upload image tar + digest manifest
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: built-image
           path: /tmp/image.tar
@@ -303,13 +303,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Download scaffolded service
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: scaffolded-service
           path: ${{ env.SERVICE_NAME }}/
 
       - name: Download built image
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: built-image
           path: /tmp/
@@ -323,7 +323,7 @@ jobs:
       # All four installs below pin to specific releases via either
       # actions or direct tarball URLs (no API).
       - name: Install kubectl
-        uses: azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d # v5
+        uses: azure/setup-kubectl@bda439f5f36b99b262ebdcd3613869bddb064c8e # v5
         with:
           version: v1.30.0
 
@@ -395,7 +395,7 @@ jobs:
           cat /tmp/kind-config.yaml
 
       - name: Create kind cluster
-        uses: helm/kind-action@06c1ae10762d3b9c1644e7fe69596ae519e015a2 # v1.15.0
+        uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
         with:
           cluster_name: golden-path
           node_image: ${{ env.KIND_IMAGE }}
