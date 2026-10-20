@@ -104,7 +104,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: test-results-${{ matrix.service }}-py${{ matrix.python-version }}
           path: results/
@@ -242,7 +242,7 @@ jobs:
           severity: "CRITICAL,HIGH"
 
       - name: Install Syft (SBOM generator)
-        uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
 
       - name: Generate SBOM (CycloneDX JSON) — SLSA L2 component (D-19)
         run: |
@@ -250,7 +250,7 @@ jobs:
           syft "${{ steps.build.outputs.image }}" -o spdx-json > sbom.spdx.json
 
       - name: Upload SBOM as artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: sbom-${{ matrix.service }}-${{ github.sha }}
           path: sbom.*.json
