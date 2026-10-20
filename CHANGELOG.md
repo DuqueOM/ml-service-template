@@ -15,6 +15,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Fixed — action bumps never reached the payload workflows
+
+- The Dependabot `github-actions` entry lists `/` and `/templates/service`, and its comment said that put both trees
+  in one PR. It did not: Dependabot's log shows each action marked "handled" in `/` and "no dependencies to update"
+  in `/templates/service`, so #263, #274 and #285 each arrived red at the CI/CD template drift gate. Both groups now
+  declare `group-by: dependency-name` — the documented mechanism for one PR across directories — majors get a group
+  of their own so they also arrive whole, and the open-PR limit rose to 10 because it now counts actions.
+- `test_dependency_automation_contract.py` asserted the directory list and passed throughout; it now asserts the
+  mechanism, and fails on the previous configuration. ADR-052 carries a dated amendment.
+
 ### Fixed — the template's own test job installed whatever PyPI had that day
 
 - `ci-examples.yml` installed `pandas numpy pyyaml jsonschema pyarrow httpx` with no versions. On 2026-10-15
