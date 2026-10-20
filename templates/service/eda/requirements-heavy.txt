@@ -24,4 +24,4 @@ ydata-profiling~=4.17
 setuptools~=80.10
 plotly~=7.1
 seaborn~=0.13
-great-tables~=1.0
+great-tables~=1.1
