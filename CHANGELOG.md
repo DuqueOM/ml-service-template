@@ -15,6 +15,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Fixed — the template's own test job installed whatever PyPI had that day
+
+- `ci-examples.yml` installed `pandas numpy pyyaml jsonschema pyarrow httpx` with no versions. On 2026-10-15
+  pyarrow 26.0.0 resolved, which requires NumPy 2 — across the D-05 boundary every pin in this template holds — and
+  all nine open Dependabot PRs went red in `Tests & Coverage` with nothing wrong in any of them (`ImportError: pyarrow
+  requires NumPy 2.0 or newer, found 1.26.4`).
+- The example still installs its own pins (it is a separate co-installation group, on pandas 3). Everything else is
+  now installed at the generated service's own pins, read from `templates/service/requirements*.txt` rather than
+  retyped, so Dependabot's bumps reach the job. A count check fails the step if the extraction finds fewer packages
+  than expected (verified by removing one pin). `pytest-asyncio`, used only by the template's own tests, is pinned
+  inline.
+
 ## [v0.32.0] - 2026-10-08
 
 Bump level: **MINOR**. The generated `requirements.txt`, `pyproject.toml` and EDA requirement files change their
