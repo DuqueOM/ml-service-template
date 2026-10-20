@@ -27,6 +27,16 @@ updates:
   # arrive whole; dependabot-auto-merge.yml still leaves them for a human.
   # `test_dependency_automation_contract.py` asserts the mechanism, not just
   # the directory list.
+  #
+  # Measured the same day, and it is NOT sufficient. The first run with
+  # `group-by` in effect (39511362236) built the per-action groups and visited
+  # both directories, yet still marked checkov-action handled after `/` and
+  # opened #300 for the root only. Until Dependabot honours the documented
+  # behaviour, an action PR can arrive half done; the CI/CD template drift
+  # gate rejects it, and the fix is to mirror the bump into
+  # `templates/service/.github/workflows/` on the PR branch, with the SHA
+  # verified against its tag. The setting stays because it is the documented
+  # contract and costs nothing; the gate is what actually holds.
   - package-ecosystem: "github-actions"
     directories:
       - "/"
@@ -153,6 +163,14 @@ updates:
       # Lift this when the numpy boundary itself is measured and moved.
       - dependency-name: "shap"
         versions: [">=0.50"]
+      # pyarrow >= 26 requires numpy 2 at import time — "ImportError: pyarrow
+      # requires NumPy 2.0 or newer, found 1.26.4", measured on 2026-10-15
+      # when an unpinned CI install pulled 26.0.0 and every open PR went red.
+      # PyPI metadata does not declare it, so a resolver cannot see the
+      # conflict and the bump looks installable until something imports it.
+      # Same boundary as numpy and shap (D-05); lift it with them.
+      - dependency-name: "pyarrow"
+        versions: [">=26"]
       # pandas 3.x cannot be installed in this group: the EDA lane's heavy
       # mode pulls ydata-profiling, and every version of it up to 4.18.4
       # requires `pandas!=1.4.0, <3.0 and >1.5`. Proven by the self-audit

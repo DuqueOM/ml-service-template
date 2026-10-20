@@ -24,6 +24,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
   of their own so they also arrive whole, and the open-PR limit rose to 10 because it now counts actions.
 - `test_dependency_automation_contract.py` asserted the directory list and passed throughout; it now asserts the
   mechanism, and fails on the previous configuration. ADR-052 carries a dated amendment.
+- **Correction, measured the same day:** the first run with `group-by` in effect still bumped checkov in the root
+  only (#300). The setting is necessary and not sufficient; the drift gate is what holds, and the payload is mirrored
+  on the PR branch. Recorded in ADR-052 and in the `dependabot.yml` comment.
+
+### Fixed — pyarrow 26 crosses the numpy boundary, and nothing could see it
+
+- pyarrow >= 26 requires numpy 2 at import time and does not declare it in its PyPI metadata, so resolvers accept the
+  bump. Dependabot proposed it as a pin (#295, #297) days after it broke CI through an unpinned install. It is now an
+  `ignore` entry beside numpy and shap — in this repository and in the generated service's own `dependabot.yml` — and
+  the boundary contract requires all three, failing on either configuration without it.
 
 ### Fixed — the template's own test job installed whatever PyPI had that day
 
