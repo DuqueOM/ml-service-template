@@ -21,4 +21,4 @@ jsonschema           ~= 4.26.0    # scripts/validate_quality_gates.py + its test
 ruff                 ~= 0.17.1
 mypy                 ~= 2.4.0
 bandit               ~= 1.9.4
-pre-commit           ~= 4.6.2
+pre-commit           ~= 4.7.0
