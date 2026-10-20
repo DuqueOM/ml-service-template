@@ -107,6 +107,26 @@ def test_an_action_bump_can_satisfy_the_drift_gate_in_one_pr() -> None:
         f"the github-actions entry covers {directories}; it must cover the runtime workflows and "
         "their payload copies together"
     )
+    # Listing both directories is necessary and NOT sufficient. This test used to
+    # stop at the assertion above and passed for weeks while Dependabot's log
+    # showed it marking each action "handled" in `/` and finding "no dependencies
+    # to update" in `/templates/service` — #263, #274 and #285 all arrived red at
+    # the drift gate. `group-by: dependency-name` is the documented mechanism
+    # that puts every directory pinning an action into one PR, so every group in
+    # this entry must declare it, and every update type must belong to a group
+    # (an ungrouped major is opened once per directory).
+    groups = entries[0].get("groups") or {}
+    assert groups, "the github-actions entry declares no groups, so no PR can span both trees"
+    for name, group in groups.items():
+        assert group.get("group-by") == "dependency-name", (
+            f"group {name!r} lacks `group-by: dependency-name`; without it Dependabot bumps the "
+            "first directory and skips the payload copies as already handled"
+        )
+    covered = {t for group in groups.values() for t in group.get("update-types", ["major", "minor", "patch"])}
+    assert {"major", "minor", "patch"} <= covered, (
+        f"update types {sorted({'major', 'minor', 'patch'} - covered)} fall outside every group, so "
+        "they arrive as one PR per directory"
+    )
 
 
 @pytest.mark.parametrize("config", CONFIGS, ids=[p.parent.parent.name for p in CONFIGS])

@@ -1,7 +1,7 @@
 # ADR-052 — Dependency updates merge on green; a human decides only where a boundary moves
 
 - **Status**: Accepted
-- **Date**: 2026-09-21
+- **Date**: 2026-09-21, amended 2026-10-20 (rule 4: `directories:` alone does not span directories)
 - **Deciders**: template maintainer
 - **Related**: ADR-048 (co-installation groups), ADR-049 (runtime/training partition),
   D-05 (compatible-release pinning), ADR-019 (CI autofix policy)
@@ -103,3 +103,25 @@ only when a boundary might move.**
   than it looks, and it still spends a human on patch bumps. The batching this
   ADR keeps is inside the ecosystem groups, where it also serves the pin
   coherence gate.
+
+## Amendment, 2026-10-20 — `directories:` alone does not put both trees in one PR
+
+**Status: Accepted.** Rule 4 stands; its mechanism was incomplete. It says a
+Dependabot entry spans a two-directory gate "with `directories:`". For GitHub
+Actions it did not. Dependabot's log for the `/`, `/templates/service` entry
+(2026-10-15) shows it processing `/`, marking every action "handled", and then
+reporting "no dependencies to update" for `/templates/service`. The payload
+copies were never bumped, and every action PR since the entry was written
+(#263, #274, #285) reached the CI/CD template drift gate half done.
+
+The documented mechanism is `groups.<name>.group-by: dependency-name`, which
+"will create a single pull request for each dependency update across all
+specified directories" (GitHub, *Dependabot options reference*). The actions
+entry now declares it on both of its groups — minor/patch and a new major
+group, so a major also arrives whole — and the limit on open PRs rose from 3
+to 10, because it now counts actions rather than batches.
+
+`test_dependency_automation_contract.py` asserted the directory list and
+passed throughout. It now asserts the mechanism: every group declares
+`group-by: dependency-name` and every update type falls inside a group.
+Verified against the previous configuration, where it fails.

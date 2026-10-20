@@ -15,8 +15,18 @@ updates:
   # implementation was two entries, which is exactly the shape this repository
   # keeps finding: a comment asserting a control nobody built.
   #
-  # `directories:` (plural) puts both trees in one PR, which is also what
-  # makes an action bump auto-mergeable (ADR-052).
+  # `directories:` (plural) is NOT enough on its own, and the comment that
+  # used to sit here said it was. Dependabot's own log for this entry
+  # (2026-10-15) shows it processing `/` first, marking every action
+  # "handled", and then reporting "no dependencies to update" for
+  # `/templates/service` — so the payload copies were never bumped and every
+  # action PR (#263, #274, #285) arrived red at the drift gate. The documented
+  # mechanism that makes one PR span directories is `group-by:
+  # dependency-name`: one pull request per action, covering every directory
+  # that pins it. Majors get their own group with the same rule, so they also
+  # arrive whole; dependabot-auto-merge.yml still leaves them for a human.
+  # `test_dependency_automation_contract.py` asserts the mechanism, not just
+  # the directory list.
   - package-ecosystem: "github-actions"
     directories:
       - "/"
@@ -24,16 +34,25 @@ updates:
     schedule:
       interval: "weekly"
       day: "thursday"
-    open-pull-requests-limit: 3
-    # Same split as the Python entries: patch, minor and digest bumps travel
-    # together and merge on green; a MAJOR arrives alone and waits for a human.
+    # One PR per action (group-by below), so the limit counts actions, not
+    # batches: 3 would have queued five of the eight bumps of 2026-10-15.
+    open-pull-requests-limit: 10
+    # Patch and minor bumps merge on green (ADR-052); a MAJOR waits for a
+    # human. Each PR carries one action across both trees.
     groups:
       actions-low-risk:
+        group-by: dependency-name
         patterns:
           - "*"
         update-types:
           - "minor"
           - "patch"
+      actions-major:
+        group-by: dependency-name
+        patterns:
+          - "*"
+        update-types:
+          - "major"
     commit-message:
       prefix: "ci"
     labels:
