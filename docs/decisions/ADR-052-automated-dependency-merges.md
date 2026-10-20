@@ -125,3 +125,16 @@ to 10, because it now counts actions rather than batches.
 passed throughout. It now asserts the mechanism: every group declares
 `group-by: dependency-name` and every update type falls inside a group.
 Verified against the previous configuration, where it fails.
+
+### Correction, later on 2026-10-20 — measured, and not sufficient
+
+The first Dependabot run with `group-by: dependency-name` in effect (run
+`39511362236`) built the per-action groups and visited both directories, and
+still marked `bridgecrewio/checkov-action` handled after `/`: #300 bumped the
+root workflow only. The documented mechanism is necessary and not sufficient.
+The setting stays, because it is the documented contract and costs nothing.
+What actually holds is the CI/CD template drift gate, which rejects the half
+change; the bump is then mirrored into the payload on the PR branch with its
+SHA verified against the tag. The contract test asserts the configuration and
+says nothing about Dependabot's behaviour; this amendment is the record of
+that difference.

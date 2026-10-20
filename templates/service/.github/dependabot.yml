@@ -46,6 +46,14 @@ updates:
       # ResolutionImpossible. Lift this together with the numpy boundary.
       - dependency-name: "shap"
         versions: [">=0.50"]
+      # pyarrow >= 26 requires numpy 2 at import time — "ImportError: pyarrow
+      # requires NumPy 2.0 or newer, found 1.26.4", measured on 2026-10-15
+      # when an unpinned CI install pulled 26.0.0 and every open PR went red.
+      # PyPI metadata does not declare it, so a resolver cannot see the
+      # conflict and the bump looks installable until something imports it.
+      # Same boundary as numpy and shap (D-05); lift it with them.
+      - dependency-name: "pyarrow"
+        versions: [">=26"]
     commit-message:
       prefix: "deps"
     labels: ["dependencies", "python"]

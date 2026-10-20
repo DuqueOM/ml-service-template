@@ -145,9 +145,16 @@ def test_every_watched_directory_exists(config: Path) -> None:
 
 @pytest.mark.parametrize("config", CONFIGS, ids=[p.parent.parent.name for p in CONFIGS])
 def test_the_correctness_boundaries_travel_with_the_payload(config: Path) -> None:
-    """numpy 1.x is a measured boundary (D-05); a generated service inherits it or it is lost."""
+    """numpy 1.x is a measured boundary (D-05); a generated service inherits it or it is lost.
+
+    shap >= 0.50 and pyarrow >= 26 cross the same boundary by requiring numpy 2.
+    pyarrow's requirement is enforced at import time and absent from its PyPI
+    metadata, so no resolver can see it: on 2026-10-15 it reached CI through an
+    unpinned install and every open PR failed, and Dependabot then proposed it
+    as a pin (#295, #297).
+    """
     ignored = {entry["dependency-name"] for update in _load(config)["updates"] for entry in update.get("ignore", [])}
-    assert {"numpy", "shap"} <= ignored, (
-        f"{config.relative_to(REPO_ROOT)} does not carry the numpy/shap boundary: {sorted(ignored)}. "
-        "Without it the generated service's first dependency PR proposes crossing D-05."
+    assert {"numpy", "shap", "pyarrow"} <= ignored, (
+        f"{config.relative_to(REPO_ROOT)} does not carry the numpy boundary (numpy, shap, pyarrow): "
+        f"{sorted(ignored)}. Without it the generated service's first dependency PR proposes crossing D-05."
     )
