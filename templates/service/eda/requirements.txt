@@ -35,7 +35,7 @@ pyarrow              ~= 25.0.1    # shared — parquet engine for
                                   # declared here: the lane only ever worked
                                   # because the service set happened to carry it.
 
-chardet              ~= 7.6       # EDA-only: encoding detection (eda-analysis skill)
+chardet              ~= 7.7       # EDA-only: encoding detection (eda-analysis skill)
 
 # Optional (uncomment for interactive notebook use):
 # jupyter~=1.0
