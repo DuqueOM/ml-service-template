@@ -15,6 +15,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Fixed — the dependency scan resolved on whatever Python the runner shipped
+
+- The Self-audit job's `resolve_python_dependencies.py` step ran on the runner's system `python3`. Resolution
+  depends on the interpreter — pandas 3 and scikit-learn 1.9 require numpy 2 from Python 3.13 on — so when
+  `ubuntu-latest` became ubuntu-26.04 it failed on every run, unable to resolve `examples/minimal` beside
+  `numpy ~= 1.26.4`, and would have scanned a set no generated image installs had it resolved. The job now reads
+  the Python from `templates/service/Dockerfile` and pins `actions/setup-python` to it, the mechanism
+  `eda-heavy-smoke.yml` already used; `test_dependency_scan_python.py` holds the order of the three steps.
+
 ### Fixed — action bumps never reached the payload workflows
 
 - The Dependabot `github-actions` entry lists `/` and `/templates/service`, and its comment said that put both trees
