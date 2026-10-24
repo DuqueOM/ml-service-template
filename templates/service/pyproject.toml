@@ -56,7 +56,7 @@ dependencies = [
 # dependency scan reported, and no code that runs in the image imports them
 # (ADR-047, ADR-049).
 train = [
-    "mlflow ~= 3.17.1",       # ADR-047
+    "mlflow ~= 3.17.2",       # ADR-047; >= 3.17.2 for CVE-2026-53995
     "skops ~= 0.16.0",        # MLflow 3.x sklearn serialiser; imported by train.py
     "optuna ~= 5.0.0",
     # "imbalanced-learn ~= 0.12.0",  # optional: SMOTE / undersampling

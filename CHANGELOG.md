@@ -15,6 +15,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Security — MLflow 3.17.2, client and tracking server together (CVE-2026-53995)
+
+- CVE-2026-53995 (HIGH): arbitrary file write through FileStore path traversal, fixed in MLflow 3.17.2. The client
+  pin moves to `mlflow ~= 3.17.2` in `requirements-train.txt` and `pyproject.toml` — a floor, so the vulnerable
+  3.17.1 can no longer be installed, which `~= 3.17.1` still allowed.
+- The fix lives in the **server**, and both tracking servers — `docker-compose.yml` and
+  `templates/service/infra/docker-compose.mlflow.yml` — still ran `v3.16.0`. #292 had moved the client to 3.17.1
+  and left them behind: Dependabot updates the client through pip and the server through docker, and cannot group
+  the two. Both servers now run `v3.17.2`.
+- `test_mlflow_client_server_pin.py` holds the client pins and every server image to one version, and the pin to
+  at least the fixed release; it fails on the split #292 left. The compose comments that restated a version now
+  name the test instead.
+
 ### Fixed — the dependency scan resolved on whatever Python the runner shipped
 
 - The Self-audit job's `resolve_python_dependencies.py` step ran on the runner's system `python3`. Resolution

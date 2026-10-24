@@ -16,8 +16,10 @@ services:
     # server could move under the client between two runs, which makes
     # client/server compatibility unverifiable by construction — and this
     # repository mandates immutable tags everywhere else (D-17..D-19,
-    # Kyverno digest verification). ADR-047 pins the client at ~= 3.16.0.
-    image: ghcr.io/mlflow/mlflow:v3.16.0
+    # Kyverno digest verification). The client's pin and this tag are held
+    # equal by templates/tests/governance/test_mlflow_client_server_pin.py,
+    # because Dependabot updates the two through different ecosystems.
+    image: ghcr.io/mlflow/mlflow:v3.17.2
     container_name: template-mlflow
     ports:
       - "5000:5000"
