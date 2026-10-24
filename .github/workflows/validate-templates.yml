@@ -235,12 +235,32 @@ jobs:
           exit-code: "1"
           format: table
 
+      - name: Read the Python the service image runs
+        id: image
+        run: |
+          version=$(sed -n 's/^FROM python:\([0-9]*\.[0-9]*\)-.*/\1/p' templates/service/Dockerfile | head -1)
+          test -n "$version" || { echo "::error::no python:X.Y base image in templates/service/Dockerfile"; exit 1; }
+          echo "python=$version" >> "$GITHUB_OUTPUT"
+
+      # On the image's Python, not the runner's. Environment markers make the
+      # resolution depend on the interpreter: pandas 3 and scikit-learn 1.9
+      # require numpy 2 from Python 3.13, so when `ubuntu-latest` became
+      # ubuntu-26.04 the system python3 changed and this step failed on every
+      # run — resolving a set no adopter's image would ever install. The same
+      # mechanism eda-heavy-smoke.yml uses; held by
+      # templates/tests/governance/test_dependency_scan_python.py.
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ steps.image.outputs.python }}
+
       - name: Resolve Python dependencies to exact versions
         # pip resolves; nothing is installed. The script fails when it finds no
         # requirements files, or when one resolves to no packages — an empty
         # resolution is indistinguishable from a clean scan, which is the
-        # defect being fixed here.
-        run: python3 scripts/resolve_python_dependencies.py /tmp/resolved-deps
+        # defect being fixed here. Every file is resolved on the service
+        # image's Python; examples/minimal's own image runs 3.11, and resolving
+        # it on 3.13 scans the versions the service line would install.
+        run: python scripts/resolve_python_dependencies.py /tmp/resolved-deps
 
       - name: Trivy dependency vulnerability scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
