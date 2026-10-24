@@ -15,6 +15,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+## [v0.33.0] - 2026-10-24
+
+Bump level: **MINOR**. The generated `requirements-train.txt`, `requirements.txt`, `pyproject.toml` and the MLflow
+compose file change their pins — MLflow to 3.17.2 for CVE-2026-53995, client and server together, and the
+dependency updates merged since v0.32.0 — which is changed scaffold output, so not a PATCH (§1.1); no §1.3
+contract changes. No `MIGRATION.md` entry: `copier update` brings the new pins and the new server image, and nothing
+else needs a manual action.
+
 ### Security — MLflow 3.17.2, client and tracking server together (CVE-2026-53995)
 
 - CVE-2026-53995 (HIGH): arbitrary file write through FileStore path traversal, fixed in MLflow 3.17.2. The client
