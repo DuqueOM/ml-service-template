@@ -239,8 +239,13 @@ updates:
       - "dependencies"
       - "python"
 
-  # Python — this repository's own tooling (root pyproject.toml)
-  - package-ecosystem: "pip"
+  # Python — this repository's own tooling (root pyproject.toml + uv.lock, ADR-053)
+  # `uv`, not `pip`: the root is a uv project, and only the uv ecosystem moves
+  # pyproject.toml and uv.lock in ONE PR (ADR-052 §4). As `pip` this entry
+  # watched a pyproject with no dependencies, so it watched nothing.
+  # check_dependency_pin_coherence.py fails if root groups exist and no uv
+  # entry watches "/".
+  - package-ecosystem: "uv"
     directory: "/"
     versioning-strategy: increase
     schedule:

@@ -1,3 +1,50 @@
+# ── Contributor environment (ADR-053) ────────────────────────────────────────
+#
+# This [project] describes the environment of the people who BUILD the
+# template. It is never rendered into a generated service: copier.yml sets
+# `_subdirectory: templates/service`, so nothing at this root — this table,
+# uv.lock, .python-version — reaches an adopter. ADR-035 (no uv.lock in the
+# template) governs templates/service and is unaffected.
+#
+# One owner per pin. These groups lock ONLY what no requirements file
+# already pins. The test environment's stack (examples/minimal/requirements.txt
+# plus four of the service's pins) keeps its single home in those files and is
+# installed by scripts/install_test_env.py, never retyped here: a copy here
+# would fail ADR-048's gate on every Dependabot bump to the original, and ADR-052
+# §4 requires that one PR can satisfy every gate. check_dependency_pin_coherence
+# rejects a group that redeclares such a pin.
+[project]
+name = "ml-service-template-contributor"
+version = "0"
+description = "Contributor environment of the template repository (not a distributable package)."
+requires-python = ">=3.11,<3.14"  # = the CI matrix in ci-examples.yml
+dependencies = []
+
+[dependency-groups]
+# Tooling environment, installed by `uv sync` (default group). It is the
+# environment of the scaffold and policy lanes (pr-smoke-lane, golden-path,
+# policy-tests: copier + jsonschema + pytest), so `uv run pytest
+# templates/tests/governance` runs here — copier brings the jinja2 the
+# render-safety gate needs. No requirements file is installed into it, so these
+# pins have no other owner.
+dev = [
+    "pre-commit ~= 4.7.0",
+    "copier ~= 9.19.1",
+    "jsonschema ~= 4.26.0",
+    "pytest ~= 9.2.0",
+]
+# Joins the TEST environment, not this one: scripts/install_test_env.py reads
+# these specifiers and installs them next to the requirements-file pins. It is
+# declared here so it has an owner Dependabot watches (it was a literal in
+# ci-examples.yml). Only the template's own async tests need it (AUDIT R8-08).
+template-tests = [
+    "pytest-asyncio ~= 1.4.0",
+]
+
+[tool.uv]
+package = false
+default-groups = ["dev"]
+
 [tool.pytest.ini_options]
 # Load tests use Locust (not pytest) — skip during collection.
 # --import-mode=importlib: three sibling test packages are all named `tests`
@@ -6,7 +53,8 @@
 # sys.modules and aborts collection from the repo root (AUDIT R8-05).
 addopts = "--ignore=templates/service/tests/load_test.py --import-mode=importlib"
 # Root env must execute async tests, not silently pass them (AUDIT R8-08);
-# requires pytest-asyncio (CI installs it explicitly, dev-setup mirrors that).
+# requires pytest-asyncio (dependency group `template-tests`, installed into the
+# test environment by scripts/install_test_env.py — locally and in CI).
 asyncio_mode = "auto"
 
 [tool.coverage.run]

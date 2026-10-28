@@ -269,7 +269,7 @@ repos:
         entry: python3 scripts/check_dependency_pin_coherence.py
         language: system
         pass_filenames: false
-        files: requirements.*\.txt$|^scripts/check_dependency_pin_coherence\.py$
+        files: requirements.*\.txt$|^scripts/(check_dependency_pin_coherence|install_test_env)\.py$|^pyproject\.toml$|^\.github/dependabot\.yml$
       - id: dependency-partition
         name: the served image imports nothing training-only
         description: |

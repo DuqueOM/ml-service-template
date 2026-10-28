@@ -45,6 +45,8 @@ dmypy.json
 
 # ─── Virtual environments ────────────────────────────
 .venv/
+# Test environment built by `make test-env` (scripts/install_test_env.py, ADR-053)
+.venv-test/
 venv/
 env/
 ENV/

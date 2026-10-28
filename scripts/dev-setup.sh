@@ -111,8 +111,8 @@ What just happened:
   4. All hooks dry-run green on the current tree
 
 From now on:
-  - `git commit`  triggers black/isort/flake8/mypy/bandit/gitleaks/
-                  validate-agentic/ci-autofix-policy-contract.
+  - `git commit`  triggers ruff (lint + format, ADR-044)/mypy/bandit/
+                  gitleaks/validate-agentic/ci-autofix-policy-contract.
   - `git push`    no hook (pre-push scaffold smoke retired in R5-L4) —
                   run `make smoke` on demand; CI pr-smoke-lane.yml is the gate.
   - The commit lane BLOCKS on failure. CI is the safety net, not the gate.

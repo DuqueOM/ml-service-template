@@ -50,6 +50,17 @@ What this checks
    gate would narrow exactly the way the defects it hunts do, and would keep
    reporting OK at its smaller size.
 
+4. **The root pyproject's groups have one owner per pin (ADR-053).** The
+   contributor environment is a uv project whose ``[dependency-groups]`` are
+   locked in ``uv.lock``. Each group must declare which environment it joins
+   (membership is total here too), and a group that joins an environment
+   populated from requirements files must NOT redeclare a distribution those
+   files pin. A copy would have to be byte-identical to its original (rule 1),
+   and Dependabot's pip PR bumping the original cannot also bump the copy and
+   the lock — so every such PR would fail this gate, which ADR-052 §4 forbids.
+   Those groups must also be watched by a Dependabot ``uv`` entry, for the
+   same reason rule 2 exists.
+
 What this deliberately does NOT check
 -------------------------------------
 Transitive resolvability. Two files can agree on every shared *direct* pin and
@@ -71,6 +82,7 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
+import tomllib
 from collections import defaultdict
 from pathlib import Path
 
@@ -78,6 +90,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEPENDABOT = REPO_ROOT / ".github" / "dependabot.yml"
+ROOT_PYPROJECT = REPO_ROOT / "pyproject.toml"
 
 # Files installed into a SHARED environment, and therefore required to agree.
 #
@@ -108,6 +121,26 @@ CO_INSTALLATION_GROUPS: dict[str, tuple[str, tuple[str, ...]]] = {
         "it never shares an environment with the generated service, which is "
         "why its pins may differ",
         ("examples/minimal/requirements.txt",),
+    ),
+}
+
+# The root pyproject's dependency groups (ADR-053) and the environment each one
+# joins: (rationale, requirements files populating that environment, whether
+# scripts/install_test_env.py adds the service pins it names). A group that
+# shares an environment with requirements files may not redeclare what they pin.
+PYPROJECT_GROUP_ENVIRONMENTS: dict[str, tuple[str, tuple[str, ...], bool]] = {
+    "dev": (
+        "contributor tooling and the scaffold/policy lanes' environment: `uv sync` "
+        "installs it alone into the root .venv; no requirements file is installed there",
+        (),
+        False,
+    ),
+    "template-tests": (
+        "joins the test environment scripts/install_test_env.py builds — the "
+        "CI-Examples full suite — from examples/minimal/requirements.txt plus "
+        "the service pins it names",
+        ("examples/minimal/requirements.txt",),
+        True,
     ),
 }
 
@@ -207,6 +240,87 @@ def _dependabot_pip_directories() -> set[str] | None:
     return {d for dirs, _ in entries for d in dirs}
 
 
+def _root_groups() -> dict[str, list[str]]:
+    """The root pyproject's dependency groups: group -> PEP 508 strings (includes skipped)."""
+    if not ROOT_PYPROJECT.is_file():
+        return {}
+    data = tomllib.loads(ROOT_PYPROJECT.read_text(encoding="utf-8"))
+    groups = data.get("dependency-groups") or {}
+    return {name: [e for e in entries if isinstance(e, str)] for name, entries in groups.items()}
+
+
+def _uv_watches_root() -> bool:
+    if not DEPENDABOT.is_file():
+        return False
+    doc = yaml.safe_load(DEPENDABOT.read_text(encoding="utf-8")) or {}
+    for entry in doc.get("updates") or []:
+        if not isinstance(entry, dict) or entry.get("package-ecosystem") != "uv":
+            continue
+        dirs = {str(entry.get("directory", "")).strip("/")}
+        dirs |= {str(d).strip("/") for d in entry.get("directories") or []}
+        if "" in dirs:
+            return True
+    return False
+
+
+def _service_pin_names() -> tuple[str, ...]:
+    """Read from the installer itself, so gate and installer cannot disagree."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    try:
+        from install_test_env import SERVICE_PIN_NAMES
+    finally:
+        sys.path.pop(0)
+    return tuple(SERVICE_PIN_NAMES)
+
+
+def _pyproject_group_failures() -> list[str]:
+    groups = _root_groups()
+    if not groups:
+        return []
+    failures: list[str] = []
+
+    unassigned = sorted(set(groups) - set(PYPROJECT_GROUP_ENVIRONMENTS))
+    if unassigned:
+        failures.append(
+            "root pyproject dependency group(s) join no declared environment:\n"
+            + "\n".join(f"    - [dependency-groups].{g}" for g in unassigned)
+            + "\n  Add each to PYPROJECT_GROUP_ENVIRONMENTS with the environment it is\n"
+            "  installed into. An unassigned group is unchecked (ADR-053)."
+        )
+
+    for group, entries in sorted(groups.items()):
+        if group not in PYPROJECT_GROUP_ENVIRONMENTS:
+            continue
+        _, owner_files, with_service_pins = PYPROJECT_GROUP_ENVIRONMENTS[group]
+        owners: dict[str, str] = {}
+        for rel in owner_files:
+            path = REPO_ROOT / rel
+            if path.is_file():
+                owners.update({name: rel for name in _declarations(path)})
+        if with_service_pins:
+            owners.update(
+                {_normalise(n): "the service pins in scripts/install_test_env.py" for n in _service_pin_names()}
+            )
+        for entry in entries:
+            match = _REQ.match(entry)
+            if match and _normalise(match.group("name")) in owners:
+                name = _normalise(match.group("name"))
+                failures.append(
+                    f"[dependency-groups].{group} redeclares '{name}', already pinned by {owners[name]}.\n"
+                    "  One owner per pin (ADR-053): a Dependabot PR that bumps the owner cannot also\n"
+                    "  bump this copy and uv.lock, so it would fail rule 1 — and ADR-052 §4 requires\n"
+                    "  that one PR can satisfy every gate. Remove it from the group."
+                )
+
+    if not _uv_watches_root():
+        failures.append(
+            "the root pyproject declares dependency groups but no Dependabot `uv` entry\n"
+            '  watches directory "/". uv.lock would age unwatched — the blind spot rule 2\n'
+            f'  exists to close. Add a `package-ecosystem: "uv"` entry to {DEPENDABOT.relative_to(REPO_ROOT)}.'
+        )
+    return failures
+
+
 def main() -> int:
     tracked = _tracked_requirements()
     declared = {p for _, members in CO_INSTALLATION_GROUPS.values() for p in members}
@@ -267,6 +381,8 @@ def main() -> int:
                         "  crossed by a robot that cannot read the comment. That happened twice."
                     )
 
+    failures.extend(_pyproject_group_failures())
+
     compared = 0
     for group, (rationale, members) in CO_INSTALLATION_GROUPS.items():
         pins: dict[str, list[tuple[str, str]]] = defaultdict(list)
@@ -305,7 +421,8 @@ def main() -> int:
         f"[dependency-pins] OK — {len(tracked)} requirements file(s) in "
         f"{len(CO_INSTALLATION_GROUPS)} co-installation group(s); "
         f"{compared} shared pin(s) agree, all watched by Dependabot; "
-        f"{len(CORRECTNESS_PINNED)} correctness-pinned package(s) boundary-protected."
+        f"{len(CORRECTNESS_PINNED)} correctness-pinned package(s) boundary-protected; "
+        f"{len(_root_groups())} root pyproject group(s) with one owner per pin."
     )
     return 0
 

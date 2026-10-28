@@ -27,7 +27,10 @@ first.
 What this checks
 ----------------
 Every requirement line and every ``pyproject.toml`` dependency entry in the
-payload, the EDA lanes and the worked example must carry a ``~=`` specifier.
+payload, the EDA lanes and the worked example must carry a ``~=`` specifier —
+and so must the root ``pyproject.toml``'s ``[dependency-groups]`` (ADR-053):
+the contributor environment is locked in ``uv.lock``, but its declarations
+follow the same rule as everything else, so a lock never hides a range.
 Rejected: ``>=``, ``<=``, ``<``, ``>``, ``!=`` alone, ``==`` (that belongs in a
 lockfile, not a declaration — D-05), and a bare, unpinned name.
 
@@ -60,7 +63,7 @@ REQUIREMENT_GLOBS = (
     "templates/service/eda/requirements*.txt",
     "examples/minimal/requirements.txt",
 )
-PYPROJECTS = ("templates/service/pyproject.toml",)
+PYPROJECTS = ("templates/service/pyproject.toml", "pyproject.toml")
 
 # `-r other.txt`, comments, blank lines, and pip flags are not declarations.
 _SKIP = re.compile(r"^\s*(#|-r\s|--)")
@@ -96,8 +99,11 @@ def _declarations() -> list[tuple[str, str, str]]:
         project = data.get("project", {})
         groups = [("dependencies", project.get("dependencies", []))]
         groups += list((project.get("optional-dependencies") or {}).items())
+        groups += list((data.get("dependency-groups") or {}).items())
         for group, entries in groups:
             for entry in entries:
+                if not isinstance(entry, str):  # {include-group = "..."} is not a declaration
+                    continue
                 match = _NAME.match(entry)
                 if match:
                     out.append((f"{name} [{group}]", match.group(1), match.group("spec").strip()))

@@ -4,14 +4,15 @@
 #
 # Usage:
 #   make help              # Show all targets
-#   make install-dev       # Set up contributor environment
+#   make install-dev       # Set up contributor environment (uv, locked; pip fallback)
+#   make test-env          # (Re)build .venv-test, the CI-Examples test environment
 #   make lint-all          # Lint all Python in templates/ and examples/
 #   make format-all        # Auto-format all Python
 #   make validate-templates# Validate K8s + Terraform + Python templates
 #   make demo-minimal      # Run the fraud detection example end-to-end
 #   make test-examples     # Run example regression tests
 
-.PHONY: help install-dev lint-all format-all validate-templates \
+.PHONY: help install-dev test-env lint-all format-all validate-templates \
         validate-agentic bootstrap smoke verify \
         mcp-check mcp-doctor mcp-render-docs \
         report-validate report-example \
@@ -34,12 +35,24 @@ help: ## Show this help message
 # Setup
 # ═══════════════════════════════════════════════
 
-install-dev: ## Install contributor tools + pre-commit hooks (idempotent)
+# ADR-053: two environments, as in CI. The root .venv holds the locked tooling
+# (`uv sync`, pyproject [dependency-groups].dev); .venv-test holds the test
+# stack, built from the files that own its pins by scripts/install_test_env.py.
+# Lint/format/type/security tools run in pre-commit's own isolated envs and are
+# not installed here (black/isort/flake8 were retired by ADR-044).
+install-dev: ## Install contributor tools + pre-commit hooks + test env (idempotent)
 	@echo "$(GREEN)Installing contributor tools...$(NC)"
-	pip install black isort flake8 mypy bandit pre-commit
-	pip install -r examples/minimal/requirements.txt
-	@bash scripts/dev-setup.sh
+	@if command -v uv >/dev/null 2>&1; then \
+	  uv sync --locked && uv run --locked bash scripts/dev-setup.sh && \
+	  python3 scripts/install_test_env.py --installer uv ; \
+	else \
+	  echo "$(YELLOW)uv not found — pip fallback: tools unlocked, test stack installed into the active interpreter$(NC)" ; \
+	  bash scripts/dev-setup.sh && python3 scripts/install_test_env.py --installer pip ; \
+	fi
 	@echo "$(GREEN)✓ Contributor environment ready$(NC)"
+
+test-env: ## (Re)build .venv-test from the files that own its pins (same set as CI-Examples)
+	python3 scripts/install_test_env.py --installer uv
 
 verify-hooks: ## Verify pre-commit hooks are actually installed in .git/hooks/
 	@hooks_dir="$$(git rev-parse --git-path hooks)" ; \

@@ -296,6 +296,87 @@ def test_a_fully_protected_boundary_passes(tmp_path: Path) -> None:
     assert "boundary-protected" in out
 
 
+INSTALLER = REPO_ROOT / "scripts" / "install_test_env.py"
+_UV_ROOT_ENTRY = '  - package-ecosystem: "uv"\n    directory: "/"\n'
+
+
+def _with_root_groups(root: Path, groups: str, *, uv_entry: bool = True) -> Path:
+    """Give the sandbox a root pyproject with dependency groups (ADR-053).
+
+    The gate reads SERVICE_PIN_NAMES from the installer, so the installer is
+    copied too; a fixture that stubbed the list would test a gate that can
+    drift from the installer, which is the drift the import exists to remove.
+    """
+    (root / "pyproject.toml").write_text(f"[dependency-groups]\n{groups}", encoding="utf-8")
+    (root / "scripts" / INSTALLER.name).write_text(INSTALLER.read_text(encoding="utf-8"), encoding="utf-8")
+    if uv_entry:
+        dependabot = root / ".github" / "dependabot.yml"
+        dependabot.write_text(dependabot.read_text(encoding="utf-8") + _UV_ROOT_ENTRY, encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    return root
+
+
+ONE_OWNER_GROUPS = 'dev = ["pre-commit ~= 4.7.0", "copier ~= 9.19.1"]\ntemplate-tests = ["pytest-asyncio ~= 1.4.0"]\n'
+
+
+def test_root_groups_with_one_owner_per_pin_pass(tmp_path: Path) -> None:
+    """The control for ADR-053: the shape the repository ships must pass."""
+    root = _with_root_groups(_sandbox(tmp_path, COHERENT_SERVICE, COHERENT_EDA), ONE_OWNER_GROUPS)
+    code, out = _run(root)
+    assert code == 0, out
+    assert "2 root pyproject group(s)" in out
+
+
+def test_a_group_may_not_retype_a_pin_its_environment_already_owns(tmp_path: Path) -> None:
+    """The copy ADR-053 refuses, and why: it would deadlock ADR-052's auto-merge.
+
+    examples/minimal/requirements.txt owns pytest in the test environment. A
+    copy in `template-tests` would have to stay byte-identical (rule 1), and
+    Dependabot's pip PR bumping the original cannot bump the copy and uv.lock —
+    so every such PR would fail. The failure has to name the owner.
+    """
+    groups = 'template-tests = ["pytest-asyncio ~= 1.4.0", "pytest ~= 9.1.1"]\n'
+    code, out = _run(_with_root_groups(_sandbox(tmp_path, COHERENT_SERVICE, COHERENT_EDA), groups))
+    assert code == 1, f"a pin owned by a requirements file was retyped in pyproject and accepted:\n{out}"
+    assert "redeclares 'pytest'" in out and "examples/minimal/requirements.txt" in out
+
+
+def test_a_service_pin_may_not_be_retyped_either(tmp_path: Path) -> None:
+    """The service pins reach the test environment through the installer, not a file of their own."""
+    groups = 'template-tests = ["pytest-asyncio ~= 1.4.0", "pyarrow ~= 24.0.0"]\n'
+    code, out = _run(_with_root_groups(_sandbox(tmp_path, COHERENT_SERVICE, COHERENT_EDA), groups))
+    assert code == 1, f"a service pin was retyped in pyproject and accepted:\n{out}"
+    assert "redeclares 'pyarrow'" in out and "install_test_env.py" in out
+
+
+def test_the_tooling_environment_may_declare_what_the_test_environment_owns(tmp_path: Path) -> None:
+    """Separate environments may differ — the same reasoning as two separate requirements groups.
+
+    `dev` is installed alone into the root .venv, where no requirements file is
+    installed, so pytest there has no other owner. A gate that rejected it
+    would be enforcing repo-wide agreement ADR-048 explicitly does not require.
+    """
+    groups = 'dev = ["pre-commit ~= 4.7.0", "pytest ~= 9.2.0"]\ntemplate-tests = ["pytest-asyncio ~= 1.4.0"]\n'
+    code, out = _run(_with_root_groups(_sandbox(tmp_path, COHERENT_SERVICE, COHERENT_EDA), groups))
+    assert code == 0, f"a pin in an environment no requirements file shares was rejected:\n{out}"
+
+
+def test_a_root_group_must_join_a_declared_environment(tmp_path: Path) -> None:
+    """Membership is total for pyproject groups too, or a new group is the cheap way around the rule."""
+    groups = ONE_OWNER_GROUPS + 'lint = ["ruff ~= 0.15.0"]\n'
+    code, out = _run(_with_root_groups(_sandbox(tmp_path, COHERENT_SERVICE, COHERENT_EDA), groups))
+    assert code == 1, f"a group that joins no declared environment was accepted:\n{out}"
+    assert "[dependency-groups].lint" in out and "join no declared environment" in out
+
+
+def test_root_groups_must_be_watched_by_a_uv_entry(tmp_path: Path) -> None:
+    """uv.lock without a Dependabot uv entry ages unwatched — rule 2's blind spot, for the lock."""
+    root = _with_root_groups(_sandbox(tmp_path, COHERENT_SERVICE, COHERENT_EDA), ONE_OWNER_GROUPS, uv_entry=False)
+    code, out = _run(root)
+    assert code == 1, f"root dependency groups with no Dependabot uv entry were accepted:\n{out}"
+    assert "Dependabot `uv` entry" in out
+
+
 def test_separate_groups_may_legitimately_differ(tmp_path: Path) -> None:
     """examples/minimal has its own venv, so its pytest pin need not match.
 

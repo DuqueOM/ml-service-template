@@ -15,6 +15,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Fixed — the recommended contributor setup installed nothing (ADR-053)
+
+- **`uv sync` works.** `CONTRIBUTING.md` recommended `uv sync && uv run pre-commit install`, but the root
+  `pyproject.toml` declared no project: uv built an empty environment on Python 3.14 (outside the 3.11–3.13 matrix)
+  and the second command failed. The root is now a non-packaged uv project with `requires-python = ">=3.11,<3.14"`,
+  `.python-version` and a committed `uv.lock` locking only the contributor tooling (pre-commit, copier, jsonschema,
+  pytest) and `pytest-asyncio`. Copier renders only `templates/service/`, so none of it reaches an adopter — a render
+  from a clone carrying the change was checked for leakage.
+- **One owner per pin.** No requirements-file pin is retyped in the root pyproject: a copy would fail ADR-048's
+  identity rule on every Dependabot bump to the original, which ADR-052 §4 forbids. `check_dependency_pin_coherence.py`
+  now rejects such a copy, requires each root dependency group to declare its environment, and requires a Dependabot
+  `uv` entry for the root; `check_pin_shape.py` applies D-05 to the root groups. Eleven new contract tests.
+- **The CI-Examples test environment has one definition.** The inline shell in `ci-examples.yml` moved to
+  `scripts/install_test_env.py`, which CI runs with pip and `make test-env` runs with uv into `.venv-test`. The set now
+  resolves in one pip run instead of three. `pytest-asyncio` moved from a workflow literal to the root `template-tests`
+  group.
+- **Dependabot's root entry watched nothing.** It used the `pip` ecosystem on a pyproject with no dependencies; it is
+  now a `uv` entry, the only ecosystem that moves `pyproject.toml` and `uv.lock` in one PR.
+- **`make install-dev` no longer installs black, isort and flake8**, which ADR-044 retired; it runs `uv sync --locked`,
+  installs the hooks and builds `.venv-test`, with a pip fallback when uv is absent.
+
 ## [v0.33.0] - 2026-10-24
 
 Bump level: **MINOR**. The generated `requirements-train.txt`, `requirements.txt`, `pyproject.toml` and the MLflow
