@@ -43,20 +43,14 @@ jobs:
         # READ from its requirements files rather than retyped here, so
         # Dependabot's bumps reach this job and the two cannot drift. The count
         # check makes the extraction fail loudly instead of installing nothing.
-        run: |
-          pip install -r examples/minimal/requirements.txt
-          PINS="$RUNNER_TEMP/service-pins.txt"
-          grep -hiE '^(pyarrow|pyyaml|jsonschema|pytest-cov)[[:space:]]*[~=<>!]' \
-            templates/service/requirements.txt templates/service/requirements-dev.txt \
-            | sed 's/#.*//' > "$PINS"
-          cat "$PINS"
-          if [ "$(grep -c . "$PINS")" -ne 4 ]; then
-            echo "::error::expected 4 service pins (pyarrow, pyyaml, jsonschema, pytest-cov); found the above"
-            exit 1
-          fi
-          pip install -r "$PINS"
-          # Only the template's own async tests use it; a generated service does not.
-          pip install "pytest-asyncio ~= 1.4.0"
+        #
+        # ADR-053: that assembly now lives in scripts/install_test_env.py, the
+        # one definition `make test-env` also uses, so a contributor's local
+        # suite and this job install the same set. pytest-asyncio's specifier
+        # moved from a literal here to the root pyproject group
+        # `template-tests`, where Dependabot's uv entry watches it. Everything
+        # resolves in one pip run instead of three.
+        run: python scripts/install_test_env.py --installer pip
 
       - name: Train model (prerequisite for examples tests)
         run: python examples/minimal/train.py

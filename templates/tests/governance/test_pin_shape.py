@@ -99,6 +99,20 @@ def test_an_unpinned_name_is_rejected(tmp_path: Path) -> None:
     assert "(no specifier)" in out
 
 
+def test_a_range_in_a_root_dependency_group_is_rejected(tmp_path: Path) -> None:
+    """ADR-053: the contributor lock does not exempt its declarations from D-05.
+
+    `copier>=9.0.0` is the exact string every scaffold workflow installs today.
+    Moving it into a locked group must not carry the range with it — a lock pins
+    the resolution, not the declaration Dependabot widens next.
+    """
+    root = _sandbox(tmp_path)
+    (root / "pyproject.toml").write_text('[dependency-groups]\ndev = ["copier>=9.0.0"]\n', encoding="utf-8")
+    code, out = _run(root)
+    assert code == 1, f"a range in a root dependency group was accepted:\n{out}"
+    assert "pyproject.toml [dev]" in out and "copier" in out
+
+
 def test_the_gate_refuses_to_pass_on_an_empty_scan(tmp_path: Path) -> None:
     root = _sandbox(tmp_path)
     for path in (root / "templates" / "service").rglob("requirements*.txt"):

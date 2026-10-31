@@ -69,15 +69,35 @@ CI will catch the same class of bug, but the local feedback loop is faster.
 3. **Install local checks (mandatory)**:
 
    ```bash
-   # Option A: uv (recommended)
+   # Option A: uv (recommended — locked by uv.lock, ADR-053)
    uv sync && uv run pre-commit install
-   # Option B: pip (compatible)
+   # Option B: pip (compatible, unlocked)
    pip install pre-commit && pre-commit install
    ```
 
-   This installs the pre-commit hooks (black, isort, flake8, mypy,
+   This installs the pre-commit hooks (ruff lint + format per ADR-044, mypy,
    bandit, gitleaks, fast contract tests). Total runtime is targeted
-   at < 10 s on a no-op commit.
+   at < 10 s on a no-op commit. `make install-dev` does all of it in one step
+   (uv when present, pip otherwise) and also builds the test environment below.
+
+   **Two environments, as in CI (ADR-053).** `uv sync` builds the root `.venv`
+   with the contributor tooling pinned in `uv.lock` (pre-commit, copier,
+   jsonschema, pytest) — the environment of the scaffold and policy lanes, so the
+   governance suite runs there: `uv run pytest templates/tests/governance`. The
+   CI-Examples test stack lives in a separate `.venv-test`, built by `make test-env` from the
+   files that own its pins — `examples/minimal/requirements.txt`, four of the
+   generated service's pins and the root `template-tests` group — through
+   [`scripts/install_test_env.py`](scripts/install_test_env.py), the same script
+   the CI-Examples job runs. Keeping them apart is deliberate: copier's own
+   dependencies never mix with the pins under test, and `uv sync` never removes
+   the test stack. Run the full suite with `.venv-test/bin/python -m pytest`
+   and the paths in the *Run full test + coverage matrix* step of
+   [`ci-examples.yml`](.github/workflows/ci-examples.yml).
+
+   A dependency already pinned in a requirements file is never retyped in the
+   root `pyproject.toml`: `check_dependency_pin_coherence.py` rejects the copy,
+   because a Dependabot PR bumping the original could not also bump it
+   (ADR-052 §4).
 
    **Without pre-commit installed, your commits will fail CI.** The CI runs the exact same pre-commit configuration, so
    local failures predict CI failures.
