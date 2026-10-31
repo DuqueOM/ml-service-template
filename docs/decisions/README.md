@@ -16,7 +16,7 @@ Numbering is dense and gaps are deliberate — a withdrawn ADR keeps its
 number and says so, rather than being deleted and leaving a hole
 (`scripts/check_doc_coherence.py` C5 enforces this).
 
-**53 decisions recorded.**
+**54 decisions recorded.**
 
 | ADR | Decision |
 | --- | --- |
@@ -73,3 +73,4 @@ number and says so, rather than being deleted and leaving a hole
 | 051 | [Runtime identity and secret addressing are one naming contract, asserted end to end](ADR-051-runtime-identity-and-secret-addressing.md) |
 | 052 | [Dependency updates merge on green; a human decides only where a boundary moves](ADR-052-automated-dependency-merges.md) |
 | 053 | [The contributor environment is a locked uv project, and every pin keeps one owner](ADR-053-contributor-environment-uv-lock.md) |
+| 054 | [The template's own CI installs its tooling from the lock; the lanes that prove an adopter's route stay on pip](ADR-054-ci-tooling-from-the-lock.md) |

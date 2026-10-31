@@ -74,11 +74,16 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install minimal deps
-        run: |
-          python -m pip install --upgrade pip
-          # Classifier needs ONLY pyyaml.
-          pip install pyyaml
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.11.19"
+
+      - name: Install locked tooling (uv.lock, ADR-054)
+        # The classifier needs only pyyaml. It comes with the locked tooling set
+        # (copier depends on it) at the version uv.lock pins, instead of whatever
+        # PyPI had when the failure happened to be classified.
+        run: bash scripts/install_ci_tooling.sh
 
       - name: Download upstream failure logs (R5-M1 — real fetch)
         # R5-M1 replaces the Phase-1 stub with a real log fetch. Three

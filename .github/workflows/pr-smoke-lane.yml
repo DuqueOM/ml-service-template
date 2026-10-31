@@ -50,6 +50,13 @@ jobs:
           python-version: "3.11"
 
       - name: Install Copier
+        # Deliberately NOT the locked tooling (ADR-054). This lane is the
+        # per-PR proof of the README quick start, which tells an adopter to
+        # `pip install "copier>=9.0.0"`: it installs exactly that, so a copier
+        # release that breaks the adopter's route fails here the day it ships
+        # rather than in somebody's first scaffold. The README standard
+        # (check_readme.py) admits that range only because a workflow
+        # installs it. Every other lane uses the lock.
         run: pip install "copier>=9.0.0" jsonschema
 
       - name: Install kustomize

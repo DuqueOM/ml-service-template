@@ -15,6 +15,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Changed — the template's CI installs its tooling from `uv.lock`, not from PyPI's latest (ADR-054)
+
+- **Ten jobs stop floating.** The scaffold, policy, pre-commit, agentic and shadow-classifier jobs ran
+  `pip install "copier>=9.0.0" jsonschema` / `pip install pyyaml` / `pip install pre-commit`: no upper bound, no
+  hashes, a different answer every run — the failure `ci-examples.yml` records for `pyarrow`. They now run
+  `scripts/install_ci_tooling.sh`, which exports the root `dev` group from `uv.lock` with hashes and installs it
+  into the interpreter `setup-python` provided (so the job's `python`, `pip` and `PATH` are unchanged); the
+  Self-audit job, which has no `setup-python`, runs its gate through `uv run --frozen`.
+- **`astral-sh/setup-uv` is SHA-pinned and pinned to one uv version.**
+- **Four lanes stay on pip, on purpose:** `pr-smoke-lane` (it proves the README quick start's
+  `pip install "copier>=9.0.0"` and is the canary for the adopter's route), `template-context-tests` (copier is
+  co-installed with the service's dev stack), `ci-examples` / `example-e2e` and the dependency scan /
+  `eda-heavy-smoke` (they exist to exercise pip's resolution of the ranges an adopter installs). This settles
+  ADR-053's deferral: `.venv-test` stays unlocked.
+- **`templates/tests/governance/test_ci_tooling_locked.py`** holds it: no `pip install` of locked tooling outside the
+  documented lanes, installer ordered after `setup-uv` and `setup-python`, one SHA-pinned uv version, and an
+  installer that cannot succeed by installing nothing. Thirteen reversions each fail a specific test.
+
 ### Fixed — the recommended contributor setup installed nothing (ADR-053)
 
 - **`uv sync` works.** `CONTRIBUTING.md` recommended `uv sync && uv run pre-commit install`, but the root

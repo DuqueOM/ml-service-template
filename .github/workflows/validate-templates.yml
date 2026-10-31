@@ -80,14 +80,18 @@ jobs:
       - name: Payload tests are about the generated service
         run: python3 scripts/check_payload_test_scope.py
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.11.19"
+
       - name: Render root parses as Copier templates
-        # jinja2 is installed explicitly: the gate exits 2 when its parser is
-        # missing rather than skipping, so a job that lacks it fails loudly
-        # instead of reporting a pass it never earned.
-        run: |
-          set -euo pipefail
-          pip install --quiet jinja2 pyyaml
-          python3 scripts/check_template_render_safety.py
+        # jinja2 comes from the locked tooling environment (copier depends on
+        # it; uv.lock pins it). The gate exits 2 when its parser is missing
+        # rather than skipping, so a job that lacks it fails loudly instead of
+        # reporting a pass it never earned. `uv run --frozen` refuses to run
+        # when the lock is stale instead of resolving something new.
+        run: uv run --frozen python3 scripts/check_template_render_safety.py
 
       - name: gitleaks (D-17)
         env:
@@ -404,19 +408,23 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.11.19"
+
       - name: Install pre-commit + local-hook deps
         # The pre-commit framework itself + the deps the LOCAL hooks
         # need (validate-agentic, ci-autofix-policy-contract). Remote
         # hooks (ruff/mypy/bandit/gitleaks) bring their
         # own envs via pre-commit; only locals share this Python.
-        run: |
-          pip install pre-commit
-          # jinja2 is for template-render-safety, which parses the Copier
-          # render root with Copier's own delimiters. It refuses to run
-          # without it (exit 2) rather than skipping, so the dependency has
-          # to be here — a gate that passes when its parser is missing is
-          # the failure mode it exists to catch.
-          pip install pytest pyyaml jsonschema jinja2
+        # All of it is the root `dev` group, installed exactly as uv.lock pins
+        # it (ADR-054), jinja2 included: it is for template-render-safety,
+        # which parses the Copier render root with Copier's own delimiters and
+        # refuses to run without it (exit 2) rather than skipping — a gate that
+        # passes when its parser is missing is the failure mode it exists to
+        # catch.
+        run: bash scripts/install_ci_tooling.sh
 
       - name: Run pre-commit hooks (ruff, mypy, bandit, gitleaks)
         # Single source of truth for versions: .pre-commit-config.yaml.
@@ -747,15 +755,21 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.11.19"
+
+      - name: Install locked tooling (uv.lock, ADR-054)
+        run: bash scripts/install_ci_tooling.sh
+
       - name: Validate agentic configuration (strict)
         # Verifies: rule frontmatter + glob matching, skill SKILL.md contracts,
         # workflow frontmatter, and AGENTS.md cross-references.
         # --strict treats warnings (missing fields, broken cross-references)
         # as failures. Glob misses are reported as informational notes only,
         # so this stays green as the template grows downstream-only patterns.
-        run: |
-          pip install --quiet pyyaml
-          python scripts/validate_agentic.py --strict
+        run: python scripts/validate_agentic.py --strict
 
       - name: Shell script syntax check
         run: |
@@ -815,8 +829,12 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.11"
-      - name: Install gate dependencies
-        run: pip install --quiet pyyaml
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.11.19"
+      - name: Install gate dependencies (pyyaml, from the lock)
+        run: bash scripts/install_ci_tooling.sh
 
       - name: Check dependency partition (ADR-049)
         # requirements.txt is what the Dockerfile installs. An unguarded import
@@ -870,10 +888,12 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.11"
-      - name: Install minimal deps
-        run: |
-          python -m pip install --upgrade pip
-          pip install pyyaml
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.11.19"
+      - name: Install locked tooling (pyyaml, from the lock)
+        run: bash scripts/install_ci_tooling.sh
       - name: Check adapter drift
         run: python3 scripts/sync_agentic_adapters.py --check
 
@@ -1001,10 +1021,13 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install validation tools
-        run: |
-          python -m pip install --upgrade pip
-          pip install pytest "copier>=9.0.0" jsonschema
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.11.19"
+
+      - name: Install validation tools (locked by uv.lock, ADR-054)
+        run: bash scripts/install_ci_tooling.sh
 
       - name: Install kustomize
         # Direct release tarball, pinned version (PR-R2-5).
