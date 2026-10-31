@@ -59,16 +59,19 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.11"
-          cache: pip
 
-      - name: Install test dependencies
-        run: |
-          python -m pip install --upgrade pip
-          # Policy suite needs pytest + pyyaml for YAML parsing, plus
-          # copier + jsonschema because the conftest fixture scaffolds a
-          # service via new-service.sh (Copier wrapper) with post-gen
-          # validation that requires jsonschema.
-          pip install pytest pyyaml "copier>=9.0.0" jsonschema
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.11.19"
+
+      - name: Install locked tooling (uv.lock, ADR-054)
+        # Policy suite needs pytest + pyyaml for YAML parsing, plus
+        # copier + jsonschema because the conftest fixture scaffolds a
+        # service via new-service.sh (Copier wrapper) with post-gen
+        # validation that requires jsonschema. All four are in the root
+        # `dev` group, locked.
+        run: bash scripts/install_ci_tooling.sh
 
       - name: Run policy suite
         run: |
