@@ -17,7 +17,7 @@ left the workflows alone — "moving the scaffold, policy and CI-Examples lanes 
 
 Ten jobs still installed that same tooling the old way:
 
-```
+```text
 pip install "copier>=9.0.0" jsonschema
 pip install pytest pyyaml "copier>=9.0.0" jsonschema
 pip install pre-commit
