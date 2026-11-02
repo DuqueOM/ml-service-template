@@ -39,7 +39,7 @@ dependencies = [
     # Serving
     "fastapi ~= 0.162.0",
     "uvicorn ~= 0.54.0",
-    "pydantic ~= 2.14.1",
+    "pydantic ~= 2.14.2",
     # Data Validation
     "pandera ~= 0.35.0",
     # Explainability
