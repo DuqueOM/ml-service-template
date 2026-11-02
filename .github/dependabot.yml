@@ -229,6 +229,14 @@ updates:
       # Lift this when the numpy boundary itself is measured and moved.
       - dependency-name: "shap"
         versions: [">=0.50"]
+      # pandas 3.1.0 is the first pandas 3 release that requires NumPy 2
+      # (`numpy>=2.0.2`); 3.0.0 to 3.0.6 accept `numpy>=1.26.0`. Measured on
+      # #314 (pandas ~=3.0.6 -> ~=3.1.0): pip failed with ResolutionImpossible
+      # on `numpy~=1.26.4` in the example's own install, the self-audit lane and
+      # all three Python versions of the test job. Same boundary as numpy, shap
+      # and pyarrow (D-05); lift them together.
+      - dependency-name: "pandas"
+        versions: [">=3.1"]
     schedule:
       interval: "weekly"
       day: "thursday"

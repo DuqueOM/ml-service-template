@@ -15,6 +15,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Fixed — pandas 3.1 crosses the numpy boundary, and the check read the file instead of the entry
+
+- pandas 3.1.0 is the first pandas 3 release that requires NumPy 2 (`numpy>=2.0.2`); 3.0.0 to 3.0.6 accept
+  `numpy>=1.26.0`. Dependabot proposed `~=3.0.6` to `~=3.1.0` for `examples/minimal` (#314), whose `numpy~=1.26.4` is
+  D-05, and pip failed with `ResolutionImpossible` in the example's install, the self-audit lane and all three Pythons
+  of the test job. pandas now sits beside numpy, shap and pyarrow as an `ignore` entry, in the example's entry and in
+  the `dependabot.yml` a generated service ships with.
+- It got through because the boundary test read the **union** of names across the file: the service entry already
+  ignored pandas majors, so the example's entry could lack it and the union still passed. A new test works per entry:
+  for each pip entry whose requirements files hold numpy 1.x, it derives which of shap, pyarrow and pandas those files
+  declare and requires the ignore for each. Against the previous configuration it fails with
+  `['/examples/minimal']: declares pandas and holds numpy 1.x, but does not ignore pandas`.
+
 ### Changed — the template's CI installs its tooling from `uv.lock`, not from PyPI's latest (ADR-054)
 
 - **Ten jobs stop floating.** The scaffold, policy, pre-commit, agentic and shadow-classifier jobs ran
