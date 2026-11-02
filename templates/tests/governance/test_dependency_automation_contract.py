@@ -147,14 +147,63 @@ def test_every_watched_directory_exists(config: Path) -> None:
 def test_the_correctness_boundaries_travel_with_the_payload(config: Path) -> None:
     """numpy 1.x is a measured boundary (D-05); a generated service inherits it or it is lost.
 
-    shap >= 0.50 and pyarrow >= 26 cross the same boundary by requiring numpy 2.
-    pyarrow's requirement is enforced at import time and absent from its PyPI
-    metadata, so no resolver can see it: on 2026-10-15 it reached CI through an
-    unpinned install and every open PR failed, and Dependabot then proposed it
-    as a pin (#295, #297).
+    shap >= 0.50, pyarrow >= 26 and pandas >= 3.1 cross the same boundary by
+    requiring numpy 2. pyarrow's requirement is enforced at import time and
+    absent from its PyPI metadata, so no resolver can see it: on 2026-10-15 it
+    reached CI through an unpinned install and every open PR failed, and
+    Dependabot then proposed it as a pin (#295, #297). pandas 3.1.0 declares it,
+    and #314 failed with ResolutionImpossible.
     """
     ignored = {entry["dependency-name"] for update in _load(config)["updates"] for entry in update.get("ignore", [])}
-    assert {"numpy", "shap", "pyarrow"} <= ignored, (
-        f"{config.relative_to(REPO_ROOT)} does not carry the numpy boundary (numpy, shap, pyarrow): "
+    assert {"numpy", "shap", "pyarrow", "pandas"} <= ignored, (
+        f"{config.relative_to(REPO_ROOT)} does not carry the numpy boundary (numpy, shap, pyarrow, pandas): "
         f"{sorted(ignored)}. Without it the generated service's first dependency PR proposes crossing D-05."
     )
+
+
+#: Packages with a release that requires NumPy 2. Only names live here: the
+#: version each entry must refuse is written in the entry, with its reason.
+REQUIRES_NUMPY_2 = ("shap", "pyarrow", "pandas")
+
+
+def _declared(directory: Path) -> dict[str, str]:
+    """Package name -> its requirement text, from every `requirements*.txt` directly in `directory`."""
+    found: dict[str, str] = {}
+    for path in sorted(directory.glob("requirements*.txt")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            match = re.match(r"\s*([A-Za-z0-9_.-]+)\s*(?:\[[^\]]*\])?\s*(.*)", line.split("#")[0])
+            if match and match.group(1):
+                found[match.group(1).lower().replace("_", "-")] = match.group(2)
+    return found
+
+
+@pytest.mark.parametrize("config", CONFIGS, ids=[p.parent.parent.name for p in CONFIGS])
+def test_every_entry_that_holds_numpy_one_refuses_what_requires_numpy_two(config: Path) -> None:
+    """The boundary is a property of an ENTRY, not of the file.
+
+    The test above reads the union of names across the whole file, so an entry
+    can lack a package that another entry already ignores and the union still
+    passes: the service entry ignored pandas majors, the example's did not, and
+    #314 (pandas 3.1.0 against `numpy~=1.26.4`) arrived red. This one derives,
+    for each pip entry, what its own requirements files declare and demands
+    the ignore for every package there that has crossed.
+    """
+    base = PAYLOAD if config.is_relative_to(PAYLOAD) else REPO_ROOT
+    gaps = []
+    checked = 0
+    for update in _load(config)["updates"]:
+        if update["package-ecosystem"] != "pip":
+            continue
+        directories = update.get("directories") or [update["directory"]]
+        declared: dict[str, str] = {}
+        for directory in directories:
+            declared.update(_declared(base / directory.lstrip("/")))
+        if not re.search(r"~=\s*1\.", declared.get("numpy", "")):
+            continue
+        checked += 1
+        ignored = {entry["dependency-name"] for entry in update.get("ignore", [])}
+        for name in REQUIRES_NUMPY_2:
+            if name in declared and name not in ignored:
+                gaps.append(f"{directories}: declares {name} and holds numpy 1.x, but does not ignore {name}")
+    assert checked, f"{config.relative_to(REPO_ROOT)}: no pip entry holds numpy 1.x, so this test would pass on nothing"
+    assert not gaps, "\n".join(gaps)
