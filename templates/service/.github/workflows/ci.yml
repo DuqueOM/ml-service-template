@@ -265,7 +265,7 @@ jobs:
       # accepts signatures from ci.yml, deploy-gcp.yml, or deploy-aws.yml so
       # the trust chain stays honest about where signing actually happens.
       - name: Install Cosign (used by deploy workflows; verify-only here)
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
         with:
           # Pin Cosign binary to v2.x explicitly. cosign-installer v4 defaults
           # to Cosign v3 which is a breaking change (CLI flag renames, mandatory
