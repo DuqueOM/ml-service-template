@@ -15,6 +15,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Fixed — the MLflow tracking servers follow the client to 3.18.0, and `main` is green again
+
+- Dependabot's #346 moved the client pin from `mlflow ~= 3.17.2` to `~= 3.18.0` in `requirements-train.txt` and the
+  service `pyproject.toml`. Both tracking servers stayed at `v3.17.2`, so
+  `test_mlflow_client_server_pin.py::test_the_client_and_every_server_agree` failed, and #346 merged anyway: auto-merge
+  queued it, `main` has no branch protection to hold a red check, and the "Full contract suite" was failing when it
+  merged. #344 and #345 landed on top of it, and `main` was red until this change.
+- The root `docker-compose.yml` and `templates/service/infra/docker-compose.mlflow.yml` now run
+  `ghcr.io/mlflow/mlflow:v3.18.0`, the version the client resolves. Executed rather than assumed, as ADR-047 does:
+  the 3.18.0 server image was started and the 3.18.0 client logged a run, registered a model, set the `champion` alias
+  and loaded `models:/…@champion` back to predict. No adopter-visible behaviour changes beyond the server version.
+
 ### Fixed — pandas 3.1 crosses the numpy boundary, and the check read the file instead of the entry
 
 - pandas 3.1.0 is the first pandas 3 release that requires NumPy 2 (`numpy>=2.0.2`); 3.0.0 to 3.0.6 accept
