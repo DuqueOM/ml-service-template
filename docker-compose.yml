@@ -19,7 +19,7 @@ services:
     # Kyverno digest verification). The client's pin and this tag are held
     # equal by templates/tests/governance/test_mlflow_client_server_pin.py,
     # because Dependabot updates the two through different ecosystems.
-    image: ghcr.io/mlflow/mlflow:v3.17.2
+    image: ghcr.io/mlflow/mlflow:v3.18.0
     container_name: template-mlflow
     ports:
       - "5000:5000"
