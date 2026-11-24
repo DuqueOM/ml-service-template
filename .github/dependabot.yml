@@ -253,9 +253,16 @@ updates:
   # watched a pyproject with no dependencies, so it watched nothing.
   # check_dependency_pin_coherence.py fails if root groups exist and no uv
   # entry watches "/".
+  #
+  # `lockfile-only`, not `increase`: the uv updater does not raise a `~=` floor
+  # the way pip's does, it rewrites the specifier into a range. #351 turned
+  # `pytest-asyncio ~= 1.4.0` into `>=1.4,<1.6` and the lock followed, so
+  # `uv lock --check` stayed green while `check_pin_shape.py` (D-05) went red on
+  # every PR. `lockfile-only` moves uv.lock inside the declared `~=` and leaves
+  # the declaration alone; a bump that leaves the `~=` is a human edit.
   - package-ecosystem: "uv"
     directory: "/"
-    versioning-strategy: increase
+    versioning-strategy: lockfile-only
     schedule:
       interval: "weekly"
       day: "thursday"
