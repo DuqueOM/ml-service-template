@@ -134,7 +134,9 @@ def main() -> int:
         print()
         print("  Dependabot proposes the widened form by default for projects it reads")
         print("  as libraries — `dependabot/pip/.../pytest-gte-8.3-and-lt-9.2` is what")
-        print("  that looks like. Keep `versioning-strategy: increase` and this gate.")
+        print("  that looks like. Keep `versioning-strategy: increase` on the `pip` entries")
+        print("  and `lockfile-only` on the `uv` entry (uv + `increase` rewrote")
+        print("  `pytest-asyncio ~= 1.4.0` to `>=1.4,<1.6`, #351), and keep this gate.")
         return 1
 
     files = len({f for f, _, _ in declarations})

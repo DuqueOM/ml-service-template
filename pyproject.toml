@@ -38,7 +38,7 @@ dev = [
 # declared here so it has an owner Dependabot watches (it was a literal in
 # ci-examples.yml). Only the template's own async tests need it (AUDIT R8-08).
 template-tests = [
-    "pytest-asyncio>=1.4,<1.6",
+    "pytest-asyncio ~= 1.5.0",
 ]
 
 [tool.uv]

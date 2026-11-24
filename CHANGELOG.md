@@ -15,6 +15,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ## [Unreleased]
 
+### Fixed — Dependabot's `uv` entry stops widening `~=` pins, and `check_pin_shape.py` is green again
+
+- Dependabot's #351 bumped `pytest-asyncio` for the root `template-tests` group and rewrote its pin from
+  `~= 1.4.0` to `>=1.4,<1.6`, with `uv.lock` following it, so `uv lock --check` stayed green. `check_pin_shape.py`
+  (D-05) did not: it failed on `main`, and with it the "Dependency + Config Declaration Gates" and the "Full contract
+  suite (template context)" on every pull request after #351.
+- The pin is `pytest-asyncio ~= 1.5.0` again, the version `uv.lock` already resolved. The cause was the config: the
+  `uv` entry set `versioning-strategy: increase`, which keeps `~=` for `pip` but rewrites it into a range for `uv`.
+  It is `lockfile-only` now, so the lock moves inside the declared `~=` and a bump that leaves it is a human edit.
+  The gate's message said to keep `increase` everywhere; it now says which ecosystem needs which.
+
 ### Fixed — the MLflow tracking servers follow the client to 3.18.0, and `main` is green again
 
 - Dependabot's #346 moved the client pin from `mlflow ~= 3.17.2` to `~= 3.18.0` in `requirements-train.txt` and the
