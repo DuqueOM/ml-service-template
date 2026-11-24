@@ -8,6 +8,8 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-yellow.svg)](LICENSE)
 [![Anti-Patterns](https://img.shields.io/badge/anti--patterns-38%20encoded-red.svg)](AGENTS.md#anti-patterns-that-agents-must-detect-and-correct)
 
+**Status:** Architecture study. I designed and directed it; AI coding agents wrote most of the code. Not deployed to a cloud.
+
 ## Status
 
 <!-- BEGIN README STATUS -->
